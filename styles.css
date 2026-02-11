@@ -30,8 +30,13 @@ pre {
 
 .layout {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 360px minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.layout.panel-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .panel {
@@ -39,6 +44,15 @@ pre {
   background: linear-gradient(175deg, #f8fdf8 0%, var(--panel) 45%, #edf3ef 100%);
   padding: 18px;
   overflow: auto;
+  min-width: 0;
+  transition: opacity 0.2s ease, padding 0.2s ease, border-width 0.2s ease;
+}
+
+.layout.panel-collapsed .panel {
+  opacity: 0;
+  pointer-events: none;
+  padding: 0;
+  border-right-width: 0;
 }
 
 h1 {
@@ -76,6 +90,26 @@ h2 {
 .field span {
   font-size: 12px;
   color: #3d4a4a;
+}
+
+.radio-group {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.radio-group label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: #2a3938;
+}
+
+.radio-group input[type="radio"] {
+  margin: 0;
 }
 
 input,
@@ -181,11 +215,21 @@ button.ghost {
 
 .map-wrap {
   position: relative;
+  min-width: 0;
 }
 
 #map {
   width: 100%;
   height: 100vh;
+}
+
+.panel-toggle {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 1200;
+  background: #0f5b47;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.18);
 }
 
 .legend {
@@ -203,6 +247,36 @@ button.ghost {
 
 .leaflet-container {
   font-family: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  font-size: 13px;
+}
+
+.leaflet-popup-content {
+  margin: 9px 10px;
+  line-height: 1.5;
+}
+
+.popup-grid {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.popup-grid dt {
+  color: #5a676e;
+}
+
+.popup-grid dd {
+  margin: 0 0 4px;
+  color: #0f1f2a;
+  font-weight: 500;
+}
+
+.depot-pin {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
 }
 
 .dot {
@@ -234,6 +308,10 @@ button.ghost {
     grid-template-columns: 1fr;
   }
 
+  .layout.panel-collapsed {
+    grid-template-columns: 1fr;
+  }
+
   .panel {
     border-right: none;
     border-bottom: 1px solid var(--line);
@@ -242,5 +320,9 @@ button.ghost {
 
   #map {
     height: 48vh;
+  }
+
+  .layout.panel-collapsed .panel {
+    display: none;
   }
 }

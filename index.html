@@ -19,10 +19,20 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="layout">
-      <aside class="panel">
+    <main class="layout" id="layout">
+      <aside class="panel" id="sidebar">
         <h1>配送エリア調整</h1>
         <p class="lead">行政区画ポリゴンを選択して担当デポを割り当てます。</p>
+
+        <section class="card">
+          <h2>0. 地図表示</h2>
+          <fieldset id="basemap-options" class="radio-group">
+            <label><input type="radio" name="basemap" value="gsi_std" checked /> 地理院 標準（日本語）</label>
+            <label><input type="radio" name="basemap" value="gsi_pale" /> 地理院 淡色</label>
+            <label><input type="radio" name="basemap" value="osm" /> OpenStreetMap</label>
+            <label><input type="radio" name="basemap" value="carto" /> CARTO Voyager</label>
+          </fieldset>
+        </section>
 
         <section class="card">
           <h2>1. データ読込</h2>
@@ -80,6 +90,9 @@
       </aside>
 
       <section class="map-wrap">
+        <button id="panel-toggle" type="button" class="panel-toggle" aria-expanded="true">
+          サイドバーを隠す
+        </button>
         <div id="map"></div>
         <div class="legend">
           <span><i class="dot sgm"></i>相模原デポ</span>
