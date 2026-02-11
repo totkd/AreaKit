@@ -154,6 +154,10 @@ def build_town_to_depots_map(asis_path: Path, target_munis: Set[str]) -> Dict[Tu
             continue
         city = pick_value(row, ["市区", "city", "municipality"])
         area_label = pick_value(row, ["対応エリア", "area_name"])
+        # These rows represent special-case ZIP codes (e.g. large facilities),
+        # not a general town-level service area; they can conflict with the town's default depot.
+        if area_label == "特定施設・基地等":
+            continue
         municipality = infer_municipality_from_asis(city, area_label, target_munis)
         if not municipality:
             continue
