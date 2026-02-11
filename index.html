@@ -3,10 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>配送エリア調整ツール</title>
+    <title>AreaKit</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=LINE+Seed+JP:wght@400;500;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=LINE+Seed+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://unpkg.com/@primer/css@21.5.1/dist/primer.css" />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -18,78 +19,97 @@
   <body>
     <main class="layout" id="layout">
       <aside class="panel" id="sidebar">
-        <h1>配送エリア調整</h1>
-        <p class="lead">行政区画ポリゴンを選択して担当デポを割り当てます。</p>
+        <h1>
+          <svg class="octicon ui-icon" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+            <path d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v10.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25V2.75Zm2.5.75a.75.75 0 0 0-.75.75v7.5c0 .414.336.75.75.75h7c.414 0 .75-.336.75-.75v-7.5a.75.75 0 0 0-.75-.75h-7Z"></path>
+          </svg>
+          AreaKit
+        </h1>
+        <p class="lead">Click town polygons to allocate delivery depots.</p>
 
         <section class="card">
-          <h2>0. 地図表示</h2>
+          <h2>
+            <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M.75 2.5a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 .75.75v11a.75.75 0 0 1-1.2.6L1.5 11.5a.75.75 0 0 1-.75-.75v-8.25Zm6.5 0a.75.75 0 0 1 .75-.75h4a.75.75 0 0 1 .75.75v8.25a.75.75 0 0 1-.75.75h-.5l-3.55 2.6a.75.75 0 0 1-1.2-.6v-11Z"></path>
+            </svg>
+            0. Map Tiles
+          </h2>
           <fieldset id="basemap-options" class="radio-group">
             <label><input type="radio" name="basemap" value="gsi_std" /> 地理院 標準（日本語）</label>
             <label><input type="radio" name="basemap" value="gsi_pale" /> 地理院 淡色</label>
             <label><input type="radio" name="basemap" value="gsi_seamless" /> 地理院 シームレス写真</label>
-            <label><input type="radio" name="basemap" value="osm" /> OpenStreetMap</label>
-            <label><input type="radio" name="basemap" value="carto" /> CARTO Voyager</label>
-            <label><input type="radio" name="basemap" value="carto_light" /> CARTO Positron</label>
-            <label><input type="radio" name="basemap" value="esri_street" checked /> Esri World Street</label>
+            <label><input type="radio" name="basemap" value="osm" /> オープンストリートマップ</label>
+            <label><input type="radio" name="basemap" value="carto" /> CARTO ボイジャー</label>
+            <label><input type="radio" name="basemap" value="carto_light" /> CARTO ポジトロン</label>
+            <label><input type="radio" name="basemap" value="esri_street" checked /> Esri ワールドストリート</label>
           </fieldset>
         </section>
 
         <section class="card">
-          <h2>1. 選択条件</h2>
-          <label class="field">
-            <span>自治体フィルタ</span>
-            <select id="municipality-filter">
-              <option value="">すべて</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>エリアID/名称ジャンプ</span>
-            <input id="zip-search" type="text" maxlength="48" placeholder="例: 14113 / 横浜市緑区" />
-          </label>
-          <div class="row">
-            <button id="jump-zip" type="button">地図で表示</button>
-            <button id="clear-selection" type="button" class="ghost">選択解除</button>
-          </div>
-        </section>
-
-        <section class="card">
-          <h2>2. デポ割当</h2>
-          <p id="selected-count">選択中: 0件</p>
+          <h2>
+            <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M1.75 2A1.75 1.75 0 0 0 0 3.75v2.5C0 7.216.784 8 1.75 8h12.5A1.75 1.75 0 0 0 16 6.25v-2.5A1.75 1.75 0 0 0 14.25 2H1.75Zm0 6A1.75 1.75 0 0 0 0 9.75v2.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0 0 16 12.25v-2.5A1.75 1.75 0 0 0 14.25 8H1.75Z"></path>
+            </svg>
+            2. Zone Select
+          </h2>
+          <p id="selected-count">Selected: 0</p>
+          <p class="section-tag">Allocate</p>
           <div class="depot-actions">
-            <button class="depot-btn depot-sgm" type="button" data-depot="SGM">相模原デポ SGM</button>
-            <button class="depot-btn depot-fuj" type="button" data-depot="FUJ">藤沢デポ FUJ</button>
-            <button class="depot-btn depot-yok" type="button" data-depot="YOK">横浜港北デポ YOK</button>
-            <button id="clear-assignment" type="button" class="ghost">割当クリア</button>
+            <button class="depot-btn depot-sgm" type="button" data-depot="SGM">SGM</button>
+            <button class="depot-btn depot-fuj" type="button" data-depot="FUJ">FUJ</button>
+            <button class="depot-btn depot-yok" type="button" data-depot="YOK">YOK</button>
           </div>
+          <div class="row history-row">
+            <button id="undo-action" type="button" class="ghost">
+              <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M9.78 2.22a.75.75 0 0 1 0 1.06L6.06 7h7.19a.75.75 0 0 1 0 1.5H6.06l3.72 3.72a.75.75 0 1 1-1.06 1.06l-5-5a.75.75 0 0 1 0-1.06l5-5a.75.75 0 0 1 1.06 0Z"></path>
+              </svg>
+              ← Undo
+            </button>
+            <button id="redo-action" type="button" class="ghost">
+              Redo →
+              <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M6.22 2.22a.75.75 0 0 1 1.06 0l5 5a.75.75 0 0 1 0 1.06l-5 5a.75.75 0 1 1-1.06-1.06L9.94 8.5H2.75a.75.75 0 0 1 0-1.5h7.19L6.22 3.28a.75.75 0 0 1 0-1.06Z"></path>
+              </svg>
+            </button>
+          </div>
+          <button id="reset-all" type="button" class="ghost danger">All Reset</button>
         </section>
 
         <section class="card">
-          <h2>3. 出力</h2>
-          <button id="export-csv" type="button">CSV出力</button>
-          <p class="small">出力列: <code>area_id,area_name,municipality,depot_code,depot_name</code></p>
+          <h2>
+            <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M7.47 10.78a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L8.75 8.44V1.75a.75.75 0 0 0-1.5 0v6.69L5.53 6.72a.75.75 0 0 0-1.06 1.06l3 3Z"></path>
+              <path d="M2.5 10.75a.75.75 0 0 0-1.5 0v2A2.25 2.25 0 0 0 3.25 15h9.5A2.25 2.25 0 0 0 15 12.75v-2a.75.75 0 0 0-1.5 0v2a.75.75 0 0 1-.75.75h-9.5a.75.75 0 0 1-.75-.75v-2Z"></path>
+            </svg>
+            3. Export
+          </h2>
+          <button id="export-csv" type="button">Download CSV</button>
         </section>
 
         <section class="card">
-          <h2>集計</h2>
-          <ul id="stats" class="stats"></ul>
+          <h2>Stats</h2>
+          <table class="stats-table">
+            <tbody id="stats"></tbody>
+          </table>
         </section>
 
         <section class="card">
-          <h2>選択中エリア</h2>
+          <h2>Selected Zones</h2>
           <div id="selected-zips" class="chips"></div>
         </section>
       </aside>
 
       <section class="map-wrap">
         <button id="panel-toggle" type="button" class="panel-toggle" aria-expanded="true">
-          サイドバーを隠す
+          Hide Sidebar
         </button>
         <div id="map"></div>
         <div class="legend">
-          <span><i class="dot sgm"></i>相模原デポ</span>
-          <span><i class="dot fuj"></i>藤沢デポ</span>
-          <span><i class="dot yok"></i>横浜港北デポ</span>
-          <span><i class="dot none"></i>未割当</span>
+          <span><i class="dot sgm"></i>SGM</span>
+          <span><i class="dot fuj"></i>FUJ</span>
+          <span><i class="dot yok"></i>YOK</span>
+          <span><i class="dot none"></i>Unassigned</span>
         </div>
       </section>
     </main>

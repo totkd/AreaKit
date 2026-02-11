@@ -54,7 +54,7 @@ const BASEMAPS = {
     },
   },
   osm: {
-    name: "OpenStreetMap",
+    name: "オープンストリートマップ",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     options: {
       attribution:
@@ -63,7 +63,7 @@ const BASEMAPS = {
     },
   },
   carto: {
-    name: "CARTO Voyager",
+    name: "CARTO ボイジャー",
     url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
     options: {
       attribution:
@@ -72,7 +72,7 @@ const BASEMAPS = {
     },
   },
   carto_light: {
-    name: "CARTO Positron",
+    name: "CARTO ポジトロン",
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     options: {
       attribution:
@@ -81,7 +81,7 @@ const BASEMAPS = {
     },
   },
   esri_street: {
-    name: "Esri World Street",
+    name: "Esri ワールドストリート",
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
     options: {
       attribution: "Tiles &copy; Esri",
@@ -153,8 +153,10 @@ const state = {
   areaMeta: new Map(),
   nameIndex: new Map(),
   assignments: new Map(),
+  initialAssignments: new Map(),
+  assignmentHistory: [],
+  assignmentHistoryIndex: -1,
   selected: new Set(),
-  currentFilterMunicipality: "",
   inScopeMunicipalities: new Set(DEFAULT_IN_SCOPE_MUNICIPALITIES),
   municipalityBoundaryLayer: null,
   municipalityBoundarySource: null,
@@ -168,12 +170,10 @@ const state = {
 const el = {
   layout: document.getElementById("layout"),
   panelToggle: document.getElementById("panel-toggle"),
-  municipalityFilter: document.getElementById("municipality-filter"),
-  areaSearch: document.getElementById("zip-search"),
-  jumpArea: document.getElementById("jump-zip"),
-  clearSelection: document.getElementById("clear-selection"),
-  clearAssignment: document.getElementById("clear-assignment"),
   exportCsv: document.getElementById("export-csv"),
+  undoAction: document.getElementById("undo-action"),
+  redoAction: document.getElementById("redo-action"),
+  resetAll: document.getElementById("reset-all"),
   selectedCount: document.getElementById("selected-count"),
   selectedAreas: document.getElementById("selected-zips"),
   stats: document.getElementById("stats"),
@@ -212,22 +212,10 @@ function initMap() {
 }
 
 function setupEventHandlers() {
-  el.municipalityFilter.addEventListener("change", () => {
-    state.currentFilterMunicipality = el.municipalityFilter.value;
-    refreshAllStyles();
-  });
-
-  el.jumpArea.addEventListener("click", handleAreaJump);
-  el.areaSearch.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleAreaJump();
-    }
-  });
-
-  el.clearSelection.addEventListener("click", clearSelection);
-  el.clearAssignment.addEventListener("click", clearAssignmentForSelected);
   el.exportCsv.addEventListener("click", exportAssignmentsCsv);
+  el.undoAction?.addEventListener("click", undoAssignments);
+  el.redoAction?.addEventListener("click", redoAssignments);
+  el.resetAll?.addEventListener("click", resetAllAssignments);
 
   el.panelToggle.addEventListener("click", toggleSidebar);
   updatePanelToggleLabel();
@@ -250,6 +238,8 @@ function setupEventHandlers() {
   });
   state.map.on("zoomstart", closeAllAreaTooltips);
   state.map.on("movestart", closeAllAreaTooltips);
+
+  updateHistoryButtons();
 }
 
 async function loadDefaultGeoJson() {
@@ -261,7 +251,7 @@ async function loadDefaultGeoJson() {
     const data = await res.json();
     loadGeoJson(data);
   } catch (_err) {
-    alert("既定データ(data/asis_fine_polygons.geojson)の読み込みに失敗しました。");
+    alert("Failed to load default data: data/asis_fine_polygons.geojson");
   }
 }
 
@@ -283,12 +273,12 @@ function toggleSidebar() {
 
 function updatePanelToggleLabel() {
   const collapsed = el.layout.classList.contains("panel-collapsed");
-  el.panelToggle.textContent = collapsed ? "サイドバーを表示" : "サイドバーを隠す";
+  el.panelToggle.textContent = collapsed ? "Show Sidebar" : "Hide Sidebar";
   el.panelToggle.setAttribute("aria-expanded", String(!collapsed));
 }
 
 function setBasemap(id) {
-  const nextId = BASEMAPS[id] ? id : "gsi_std";
+  const nextId = BASEMAPS[id] ? id : "esri_street";
   if (nextId === state.activeBasemapId && state.baseLayers.get(nextId) && state.map.hasLayer(state.baseLayers.get(nextId))) {
     return;
   }
@@ -642,7 +632,7 @@ function applyAsisAreaLabelsToLoadedAreas() {
 
 function loadGeoJson(data) {
   if (!data || data.type !== "FeatureCollection" || !Array.isArray(data.features)) {
-    alert("FeatureCollection形式のGeoJSONを指定してください。");
+    alert("Please provide a valid GeoJSON FeatureCollection.");
     return;
   }
 
@@ -658,7 +648,6 @@ function loadGeoJson(data) {
   state.nameIndex.clear();
   state.assignments.clear();
   state.selected.clear();
-  state.currentFilterMunicipality = "";
 
   let fallbackCounter = 0;
 
@@ -721,8 +710,8 @@ function loadGeoJson(data) {
     state.map.fitBounds(bounds.pad(0.15));
   }
 
-  el.municipalityFilter.value = "";
-  populateMunicipalityFilter();
+  state.initialAssignments = new Map(state.assignments);
+  resetAssignmentHistory();
   refreshAllStyles();
   renderSelected();
   renderStats();
@@ -1001,17 +990,17 @@ function tooltipText(areaId) {
 function buildPopupHtml(areaId) {
   const meta = state.areaMeta.get(areaId);
   if (!meta) {
-    return `<div class="popup-grid"><dt>町域</dt><dd>${escapeHtml(formatAreaIdForDisplay(areaId))}</dd></div>`;
+    return `<div class="popup-grid"><dt>Town</dt><dd>${escapeHtml(formatAreaIdForDisplay(areaId))}</dd></div>`;
   }
 
   const depotCode = state.assignments.get(areaId) || "";
-  const depotName = DEPOTS[depotCode]?.name || "未割当";
+  const depotName = DEPOTS[depotCode]?.name || "Unassigned";
 
   return [
     '<dl class="popup-grid">',
-    `<dt>町域</dt><dd>${escapeHtml(meta.name || "-")}</dd>`,
-    `<dt>対応エリア</dt><dd>${escapeHtml(meta.dispatchAreaLabel || "-")}</dd>`,
-    `<dt>割当デポ</dt><dd>${escapeHtml(depotName)}</dd>`,
+    `<dt>Town</dt><dd>${escapeHtml(meta.name || "-")}</dd>`,
+    `<dt>Area</dt><dd>${escapeHtml(meta.dispatchAreaLabel || "-")}</dd>`,
+    `<dt>Depot</dt><dd>${escapeHtml(depotName)}</dd>`,
     "</dl>",
   ].join("");
 }
@@ -1033,26 +1022,19 @@ function styleForArea(areaId) {
   const assignment = state.assignments.get(areaId);
   const depot = DEPOTS[assignment];
   const baseColor = depot ? depot.color : "#9ea8b6";
-  const isFilteredOut = isFilteredOutByMunicipality(areaId);
   const isOutOfScope = !isInScopeArea(areaId);
+  const isFuj = assignment === "FUJ";
+  const activeFill = selected ? 0.3 : 0.12;
+  const fujBoost = isFuj ? (selected ? 0.08 : 0.04) : 0;
 
   return {
     color: isOutOfScope ? "#7c8591" : selected ? "#0f1720" : "#44566c",
     weight: isOutOfScope ? 0.9 + borderBoost * 0.4 : selected ? 2.5 + borderBoost * 0.8 : 1.25 + borderBoost * 0.7,
     dashArray: isOutOfScope ? "3 5" : selected ? "4 3" : "",
     fillColor: baseColor,
-    fillOpacity: isOutOfScope ? 0.02 : isFilteredOut ? 0.015 : selected ? 0.3 : 0.12,
-    opacity: isOutOfScope ? 0.28 : isFilteredOut ? 0.19 : 0.86,
+    fillOpacity: isOutOfScope ? 0.02 : activeFill + fujBoost,
+    opacity: isOutOfScope ? 0.28 : 0.86,
   };
-}
-
-function isFilteredOutByMunicipality(areaId) {
-  const current = state.currentFilterMunicipality;
-  if (!current) {
-    return false;
-  }
-  const municipality = state.areaMeta.get(areaId)?.municipality || "";
-  return municipality !== current;
 }
 
 function isInScopeArea(areaId) {
@@ -1172,15 +1154,20 @@ function assignSelected(depotCode) {
     return;
   }
   if (state.selected.size === 0) {
-    alert("先にエリアを選択してください。");
+    alert("Select at least one zone first.");
     return;
   }
 
+  let changed = false;
   state.selected.forEach((areaId) => {
     if (!isInScopeArea(areaId)) {
+      return;
+    }
+    if (state.assignments.get(areaId) === depotCode) {
       return;
     }
     state.assignments.set(areaId, depotCode);
+    changed = true;
 
     const layers = state.areaToLayers.get(areaId) || [];
     layers.forEach((layer) => {
@@ -1190,136 +1177,108 @@ function assignSelected(depotCode) {
     });
   });
 
-  refreshAllStyles();
-  renderStats();
-}
-
-function clearAssignmentForSelected() {
-  if (state.selected.size === 0) {
-    alert("先にエリアを選択してください。");
+  if (!changed) {
     return;
   }
 
-  state.selected.forEach((areaId) => {
-    if (!isInScopeArea(areaId)) {
-      return;
-    }
-    state.assignments.set(areaId, "");
+  refreshAllStyles();
+  pushAssignmentHistory();
+}
 
-    const layers = state.areaToLayers.get(areaId) || [];
+function createAssignmentSnapshot() {
+  return new Map(state.assignments);
+}
+
+function isSameAssignmentSnapshot(a, b) {
+  if (!a || !b || a.size !== b.size) {
+    return false;
+  }
+  for (const [key, value] of a.entries()) {
+    if (b.get(key) !== value) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function resetAssignmentHistory() {
+  state.assignmentHistory = [createAssignmentSnapshot()];
+  state.assignmentHistoryIndex = 0;
+  updateHistoryButtons();
+}
+
+function pushAssignmentHistory() {
+  const snapshot = createAssignmentSnapshot();
+  const current = state.assignmentHistory[state.assignmentHistoryIndex];
+  if (current && isSameAssignmentSnapshot(current, snapshot)) {
+    return;
+  }
+  if (state.assignmentHistoryIndex < state.assignmentHistory.length - 1) {
+    state.assignmentHistory = state.assignmentHistory.slice(0, state.assignmentHistoryIndex + 1);
+  }
+  state.assignmentHistory.push(snapshot);
+  state.assignmentHistoryIndex = state.assignmentHistory.length - 1;
+  updateHistoryButtons();
+}
+
+function applyAssignmentSnapshot(snapshot) {
+  if (!snapshot) {
+    return;
+  }
+  state.assignments = new Map(snapshot);
+  refreshAllStyles();
+  syncPopupContentForAllAreas();
+}
+
+function syncPopupContentForAllAreas() {
+  state.areaToLayers.forEach((layers, areaId) => {
     layers.forEach((layer) => {
       if (layer.getPopup()) {
         layer.setPopupContent(buildPopupHtml(areaId));
       }
     });
   });
+}
 
+function undoAssignments() {
+  if (state.assignmentHistoryIndex <= 0) {
+    return;
+  }
+  state.assignmentHistoryIndex -= 1;
+  applyAssignmentSnapshot(state.assignmentHistory[state.assignmentHistoryIndex]);
+  updateHistoryButtons();
+}
+
+function redoAssignments() {
+  if (state.assignmentHistoryIndex >= state.assignmentHistory.length - 1) {
+    return;
+  }
+  state.assignmentHistoryIndex += 1;
+  applyAssignmentSnapshot(state.assignmentHistory[state.assignmentHistoryIndex]);
+  updateHistoryButtons();
+}
+
+function resetAllAssignments() {
+  if (state.areaMeta.size === 0) {
+    return;
+  }
+  const snapshot = new Map(state.initialAssignments);
+  if (isSameAssignmentSnapshot(snapshot, createAssignmentSnapshot())) {
+    return;
+  }
+  state.assignments = snapshot;
   refreshAllStyles();
-  renderStats();
+  syncPopupContentForAllAreas();
+  pushAssignmentHistory();
 }
 
-function populateMunicipalityFilter() {
-  const values = [...new Set([...state.areaMeta.values()].map((v) => v.municipality).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, "ja")
-  );
-
-  el.municipalityFilter.innerHTML = "";
-  const allOption = document.createElement("option");
-  allOption.value = "";
-  allOption.textContent = "すべて";
-  el.municipalityFilter.append(allOption);
-
-  values.forEach((value) => {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    el.municipalityFilter.append(option);
-  });
-}
-
-function handleAreaJump() {
-  const query = String(el.areaSearch.value || "").trim();
-  if (!query) {
-    return;
+function updateHistoryButtons() {
+  if (el.undoAction) {
+    el.undoAction.disabled = state.assignmentHistoryIndex <= 0;
   }
-
-  const candidates = findAreaCandidates(query);
-  if (candidates.length === 0) {
-    alert(`"${query}" に一致するエリアが見つかりません。`);
-    return;
+  if (el.redoAction) {
+    el.redoAction.disabled = state.assignmentHistoryIndex >= state.assignmentHistory.length - 1;
   }
-
-  const bounds = L.latLngBounds();
-  candidates.forEach((areaId) => {
-    if (!isInScopeArea(areaId)) {
-      return;
-    }
-    state.selected.add(areaId);
-    state.areaToLayers.get(areaId)?.forEach((layer) => {
-      layer.setStyle(styleForArea(areaId));
-      bounds.extend(layer.getBounds());
-    });
-  });
-
-  if (bounds.isValid()) {
-    state.map.fitBounds(bounds.pad(0.35), { maxZoom: 13 });
-  }
-
-  const firstLayer = state.areaToLayers.get(candidates[0])?.[0];
-  if (firstLayer) {
-    if (firstLayer.getPopup()) {
-      firstLayer.setPopupContent(buildPopupHtml(candidates[0]));
-    } else {
-      firstLayer.bindPopup(buildPopupHtml(candidates[0]), { maxWidth: 360 });
-    }
-    firstLayer.openPopup();
-  }
-
-  renderSelected();
-}
-
-function findAreaCandidates(query) {
-  const direct = resolveAreaIdsByKey(query);
-  if (direct.length > 0) {
-    return direct;
-  }
-
-  const lowered = query.toLowerCase();
-  const out = [];
-  state.areaMeta.forEach((meta, areaId) => {
-    const haystack = `${areaId} ${formatAreaIdForDisplay(areaId)} ${meta.name} ${meta.municipality} ${meta.dispatchAreaLabel || ""}`.toLowerCase();
-    if (haystack.includes(lowered)) {
-      out.push(areaId);
-    }
-  });
-  return out.slice(0, 40);
-}
-
-function resolveAreaIdsByKey(value) {
-  const out = new Set();
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return [];
-  }
-
-  if (state.areaToLayers.has(raw)) {
-    out.add(raw);
-  }
-
-  const zipped = normalizeZip(raw);
-  if (zipped && state.areaToLayers.has(zipped)) {
-    out.add(zipped);
-  }
-
-  const key1 = normalizeMatchKey(raw);
-  const key2 = normalizeMatchKey(canonicalAreaName(raw));
-  [key1, key2].forEach((key) => {
-    if (state.nameIndex.has(key)) {
-      state.nameIndex.get(key).forEach((areaId) => out.add(areaId));
-    }
-  });
-
-  return [...out];
 }
 
 function rebuildNameIndex() {
@@ -1382,7 +1341,7 @@ function canonicalAreaName(value) {
 
 function exportAssignmentsCsv() {
   if (state.areaMeta.size === 0) {
-    alert("先にGeoJSONを読み込んでください。");
+    alert("No area data loaded.");
     return;
   }
 
@@ -1427,13 +1386,13 @@ function getDateStamp() {
 
 function renderSelected() {
   const areaIds = [...state.selected].sort((a, b) => a.localeCompare(b, "ja"));
-  el.selectedCount.textContent = `選択中: ${areaIds.length}件`;
+  el.selectedCount.textContent = `Selected: ${areaIds.length}`;
   el.selectedAreas.innerHTML = "";
 
   if (areaIds.length === 0) {
     const span = document.createElement("span");
     span.className = "hint";
-    span.textContent = "地図でエリアをクリック";
+    span.textContent = "Click polygons on the map.";
     el.selectedAreas.append(span);
     return;
   }
@@ -1477,16 +1436,22 @@ function renderStats() {
   });
 
   el.stats.innerHTML = "";
-  appendStat(`総エリア数: ${total}`);
-  appendStat(`割当済み: ${assigned}`);
-  appendStat(`未割当: ${Math.max(total - assigned, 0)}`);
-  appendStat(`SGM: ${byDepot.SGM}`);
-  appendStat(`FUJ: ${byDepot.FUJ}`);
-  appendStat(`YOK: ${byDepot.YOK}`);
+  appendStat("Total zones", total);
+  appendStat("Assigned", assigned);
+  appendStat("Unassigned", Math.max(total - assigned, 0));
+  appendStat("SGM", byDepot.SGM);
+  appendStat("FUJ", byDepot.FUJ);
+  appendStat("YOK", byDepot.YOK);
 }
 
-function appendStat(text) {
-  const li = document.createElement("li");
-  li.textContent = text;
-  el.stats.append(li);
+function appendStat(label, value) {
+  const tr = document.createElement("tr");
+  const th = document.createElement("th");
+  th.className = "stat-key";
+  th.textContent = String(label);
+  const td = document.createElement("td");
+  td.className = "stat-value";
+  td.textContent = String(value);
+  tr.append(th, td);
+  el.stats.append(tr);
 }
