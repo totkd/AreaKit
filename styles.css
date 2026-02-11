@@ -335,22 +335,31 @@ button.ghost.danger {
 }
 
 .depot-pin {
-  display: block;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 3px solid #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 16px;
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   box-shadow: 0 0 0 2px #101827, 0 6px 14px rgba(0, 0, 0, 0.35);
 }
 
-.depot-pin::after {
-  content: "";
-  display: block;
-  width: 6px;
-  height: 6px;
-  margin: 5px auto 0;
-  border-radius: 999px;
-  background: #ffffff;
+.depot-pin.depot-sgm {
+  background: var(--sgm);
+}
+
+.depot-pin.depot-fuj {
+  background: var(--fuj);
+}
+
+.depot-pin.depot-yok {
+  background: var(--yok);
 }
 
 .dot {

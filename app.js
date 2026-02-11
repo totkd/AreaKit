@@ -163,6 +163,7 @@ const state = {
   loadedGeoData: null,
   asisAreaLabelByTown: new Map(),
   asisDefaultAreaLabelByMunicipality: new Map(),
+  asisAreaLabelByPostal: new Map(),
   asisPostalCodesByTown: new Map(),
   depotMarkerLayer: null,
 };
@@ -316,9 +317,9 @@ function initDepotMarkers() {
       pane: "depotPinPane",
       icon: L.divIcon({
         className: "",
-        html: `<span class="depot-pin" style="background:${depot.color}"></span>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
+        html: `<span class="depot-pin depot-${site.code.toLowerCase()}">${site.code}</span>`,
+        iconSize: [56, 28],
+        iconAnchor: [28, 14],
       }),
       title: `${site.code} ${site.address}`,
     });
@@ -395,6 +396,7 @@ function buildAsisAreaLabelMaps(csvText) {
 
   const townCounter = new Map();
   const municipalityCounter = new Map();
+  const postalCounter = new Map();
   const postalByTown = new Map();
 
   for (let i = 1; i < rows.length; i += 1) {
@@ -420,21 +422,23 @@ function buildAsisAreaLabelMaps(csvText) {
       continue;
     }
 
+    addCount(municipalityCounter, municipality, areaLabel);
+
     const town = canonicalTownName(pickCsvValue(row, indexByHeader, ["町", "town", "S_NAME"]));
     const postalCodes = collectPostalCodes(
       pickCsvValue(row, indexByHeader, ["郵便番号", "postal_code", "zip_code", "zipcode", "zip"])
     );
+    postalCodes.forEach((postal) => addCount(postalCounter, postal, areaLabel));
     if (town) {
       const key = `${municipality}|${town}`;
       addCount(townCounter, key, areaLabel);
       addPostalCodes(postalByTown, key, postalCodes);
-    } else {
-      addCount(municipalityCounter, municipality, areaLabel);
     }
   }
 
   state.asisAreaLabelByTown = collapseCountMap(townCounter);
   state.asisDefaultAreaLabelByMunicipality = collapseCountMap(municipalityCounter);
+  state.asisAreaLabelByPostal = collapseCountMap(postalCounter);
   state.asisPostalCodesByTown = collapsePostalCodeMap(postalByTown);
 }
 
@@ -599,12 +603,10 @@ function collectPostalCodes(raw) {
 function applyAsisAreaLabelsToLoadedAreas() {
   state.areaMeta.forEach((meta, areaId) => {
     let changed = false;
-    if (!meta.dispatchAreaLabel) {
-      const label = lookupDispatchAreaLabel(meta.municipality, meta.townName);
-      if (label) {
-        meta.dispatchAreaLabel = label;
-        changed = true;
-      }
+    const resolvedLabel = getDispatchAreaLabel(meta.raw || {}, meta.municipality, meta.townName, meta.postalCodes || []);
+    if (resolvedLabel && meta.dispatchAreaLabel !== resolvedLabel) {
+      meta.dispatchAreaLabel = resolvedLabel;
+      changed = true;
     }
 
     if (!meta.postalCodes || meta.postalCodes.length === 0) {
@@ -674,12 +676,13 @@ function loadGeoJson(data) {
       state.areaToLayers.get(areaId).push(layer);
 
       if (!state.areaMeta.has(areaId)) {
+        const postalCodes = getPostalCodes(props, municipality, townName, areaId);
         state.areaMeta.set(areaId, {
           name: areaName || areaId,
           municipality,
           townName,
-          dispatchAreaLabel: getDispatchAreaLabel(props, municipality, townName),
-          postalCodes: getPostalCodes(props, municipality, townName, areaId),
+          dispatchAreaLabel: getDispatchAreaLabel(props, municipality, townName, postalCodes),
+          postalCodes,
           raw: props,
         });
       }
@@ -826,14 +829,18 @@ function extractTownName(props, areaName, municipality) {
   return "";
 }
 
-function getDispatchAreaLabel(props, municipality, townName) {
+function getDispatchAreaLabel(props, municipality, townName, postalCodes = []) {
   const inline = String(
     props.dispatch_area_label || props.dispatch_area || props.group_label || props.対応エリア || ""
   ).trim();
+  const fromAsis = lookupDispatchAreaLabel(municipality, townName, postalCodes);
+  if (fromAsis) {
+    return fromAsis;
+  }
   if (inline && inline !== municipality) {
     return inline;
   }
-  return lookupDispatchAreaLabel(municipality, townName);
+  return inline || "";
 }
 
 function getPostalCodes(props, municipality, townName, areaId) {
@@ -854,7 +861,7 @@ function getPostalCodes(props, municipality, townName, areaId) {
   return [];
 }
 
-function lookupDispatchAreaLabel(municipality, townName) {
+function lookupDispatchAreaLabel(municipality, townName, postalCodes = []) {
   const muni = canonicalMunicipality(municipality);
   if (!muni) {
     return "";
@@ -865,6 +872,13 @@ function lookupDispatchAreaLabel(municipality, townName) {
     const key = `${muni}|${town}`;
     if (state.asisAreaLabelByTown.has(key)) {
       return state.asisAreaLabelByTown.get(key);
+    }
+  }
+
+  for (const code of postalCodes) {
+    const zip = normalizeZip(code);
+    if (zip && state.asisAreaLabelByPostal.has(zip)) {
+      return state.asisAreaLabelByPostal.get(zip);
     }
   }
 
@@ -1001,11 +1015,16 @@ function buildPopupHtml(areaId) {
 
   const depotCode = state.assignments.get(areaId) || "";
   const depotName = DEPOTS[depotCode]?.name || "Unassigned";
+  const areaLabel =
+    meta.dispatchAreaLabel ||
+    lookupDispatchAreaLabel(meta.municipality, meta.townName, meta.postalCodes || []) ||
+    meta.municipality ||
+    "-";
 
   return [
     '<dl class="popup-grid">',
     `<dt>Town</dt><dd>${escapeHtml(meta.name || "-")}</dd>`,
-    `<dt>Area</dt><dd>${escapeHtml(meta.dispatchAreaLabel || "-")}</dd>`,
+    `<dt>Area</dt><dd>${escapeHtml(areaLabel)}</dd>`,
     `<dt>Depot</dt><dd>${escapeHtml(depotName)}</dd>`,
     "</dl>",
   ].join("");
@@ -1030,14 +1049,14 @@ function styleForArea(areaId) {
   const baseColor = depot ? depot.color : "#9ea8b6";
   const isOutOfScope = !isInScopeArea(areaId);
   const activeFill = selected ? 0.3 : 0.12;
-  const fujScale = assignment === "FUJ" ? 0.78 : 1;
+  const fujScale = assignment === "FUJ" ? 1.3 : 1;
 
   return {
     color: isOutOfScope ? "#7c8591" : selected ? "#0f1720" : "#44566c",
     weight: isOutOfScope ? 0.9 + borderBoost * 0.4 : selected ? 2.5 + borderBoost * 0.8 : 1.25 + borderBoost * 0.7,
     dashArray: isOutOfScope ? "3 5" : selected ? "4 3" : "",
     fillColor: baseColor,
-    fillOpacity: isOutOfScope ? 0.02 : activeFill * fujScale,
+    fillOpacity: isOutOfScope ? 0.02 : Math.min(0.5, activeFill * fujScale),
     opacity: isOutOfScope ? 0.28 : 0.86,
   };
 }
