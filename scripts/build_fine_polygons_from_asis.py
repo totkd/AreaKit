@@ -6,6 +6,7 @@ Inputs:
 - asis.csv (ZIP-level current assignment)
 - e-Stat KMZ package for Kanagawa (A002005212020DDKWC14.zip)
 - baseline admin assignment CSV (for municipality fallback)
+- optional Tokyo town-level GeoJSON (Machida etc.)
 - optional N03 GeoJSON fallback for municipalities not covered by town polygons
 
 Output:
@@ -326,6 +327,60 @@ def build_town_features(
     return features
 
 
+
+def load_tokyo_town_features(
+    tokyo_town_geojson_path: Path,
+    target_munis: Set[str],
+    town_to_depots: Dict[Tuple[str, str], Set[str]],
+    muni_to_single_depot: Dict[str, str],
+    muni_to_depots: Dict[str, Set[str]],
+) -> List[dict]:
+    if not tokyo_town_geojson_path.exists():
+        return []
+
+    with tokyo_town_geojson_path.open(encoding="utf-8") as f:
+        data = json.load(f)
+
+    out = []
+    for ft in data.get("features", []):
+        props = ft.get("properties", {})
+        municipality = canonical_municipality(
+            props.get("municipality") or props.get("area_name") or props.get("N03_004") or ""
+        )
+        if municipality not in target_munis:
+            continue
+        town_name = str(props.get("town_name") or props.get("S_NAME") or props.get("name") or "").strip()
+        area_id = str(props.get("area_id") or props.get("town_code") or props.get("code") or "").strip()
+        if not area_id:
+            area_id = f"TK13-{len(out) + 1:05d}"
+
+        depot_code, status = pick_depot_for_town(
+            municipality=municipality,
+            town_name=town_name,
+            town_to_depots=town_to_depots,
+            muni_to_single_depot=muni_to_single_depot,
+            muni_to_depots=muni_to_depots,
+        )
+        out.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "area_id": f"TK13-{area_id}",
+                    "area_name": f"{municipality}{town_name}",
+                    "municipality": municipality,
+                    "town_name": town_name,
+                    "pref_name": "東京都",
+                    "town_code": area_id,
+                    "source": "tokyo-town-geojson",
+                    "depot_code": depot_code,
+                    "depot_name": DEPOT_NAMES.get(depot_code, ""),
+                    "assign_status": status,
+                },
+                "geometry": ft.get("geometry"),
+            }
+        )
+    return out
+
 def load_n03_fallback_features(n03_geojson_path: Path, target_ids: Set[str], muni_to_single_depot: Dict[str, str]) -> List[dict]:
     if not n03_geojson_path.exists():
         return []
@@ -389,9 +444,14 @@ def main() -> None:
         help="Baseline admin assignment CSV for municipality fallback.",
     )
     parser.add_argument(
+        "--tokyo-town-geojson",
+        default="data/tokyo/machida_towns.geojson",
+        help="Optional town-level GeoJSON for Tokyo (e.g. Machida).",
+    )
+    parser.add_argument(
         "--n03-fallback",
         default="data/n03_target_admin_areas.geojson",
-        help="N03 GeoJSON used for municipalities not covered by town KMZ (e.g. Machida).",
+        help="N03 GeoJSON used for municipalities not covered by town polygons.",
     )
     parser.add_argument(
         "--out",
@@ -403,20 +463,32 @@ def main() -> None:
     asis_path = Path(args.asis)
     kmz_zip_path = Path(args.kanagawa_kmz_zip)
     baseline_path = Path(args.baseline)
+    tokyo_town_geojson_path = Path(args.tokyo_town_geojson)
     n03_fallback_path = Path(args.n03_fallback)
     out_path = Path(args.out)
 
     muni_to_single_depot, muni_to_depots = load_baseline_assignments(baseline_path)
-    target_munis = set(muni_to_depots.keys()) - {"町田市"}
+    kanagawa_target_munis = set(muni_to_depots.keys()) - {"町田市"}
+    tokyo_target_munis = {"町田市"}
 
-    town_to_depots = build_town_to_depots_map(asis_path, target_munis)
-    town_areas = collect_town_areas_from_kmz(kmz_zip_path, target_munis)
-    town_features = build_town_features(town_areas, town_to_depots, muni_to_single_depot, muni_to_depots)
+    town_to_depots = build_town_to_depots_map(asis_path, set(muni_to_depots.keys()))
+    town_areas = collect_town_areas_from_kmz(kmz_zip_path, kanagawa_target_munis)
+    kanagawa_town_features = build_town_features(town_areas, town_to_depots, muni_to_single_depot, muni_to_depots)
 
-    # Machida is not covered by the Kanagawa KMZ; include it from N03 fallback.
-    fallback_features = load_n03_fallback_features(n03_fallback_path, {"13209"}, muni_to_single_depot)
+    tokyo_town_features = load_tokyo_town_features(
+        tokyo_town_geojson_path,
+        tokyo_target_munis,
+        town_to_depots,
+        muni_to_single_depot,
+        muni_to_depots,
+    )
 
-    all_features = town_features + fallback_features
+    # 町田市の町丁目データが無い場合のみ、N03境界でフォールバックする。
+    fallback_features = []
+    if not tokyo_town_features:
+        fallback_features = load_n03_fallback_features(n03_fallback_path, {"13209"}, muni_to_single_depot)
+
+    all_features = kanagawa_town_features + tokyo_town_features + fallback_features
     out = {"type": "FeatureCollection", "features": all_features}
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

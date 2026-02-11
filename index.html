@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>配送エリア調整ツール</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@400;500;700&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -24,11 +30,7 @@
             <span>行政区画 GeoJSON</span>
             <input id="geojson-input" type="file" accept=".geojson,.json,application/geo+json,application/json" />
           </label>
-          <label class="field">
-            <span>既存割当 CSV（任意）</span>
-            <input id="csv-input" type="file" accept=".csv,text/csv" />
-          </label>
-          <button id="load-sample" type="button" class="ghost">行政区画サンプル読込</button>
+          <p class="small">運用では asis 反映済み GeoJSON を読み込んで編集してください。</p>
         </section>
 
         <section class="card">

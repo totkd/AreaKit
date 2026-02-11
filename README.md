@@ -7,7 +7,7 @@
 - 行政区画 GeoJSON（Polygon/MultiPolygon）を読み込み
 - ポリゴンをクリック選択して `SGM / FUJ / YOK` に割当
 - 自治体フィルタ、エリアID/名称ジャンプ
-- 割当CSVの読込
+- 運用対象外エリアをグレーアウトし、選択・割当を禁止
 - 割当結果のCSV出力
 
 ## 起動方法
@@ -19,16 +19,13 @@ python3 -m http.server 8000
 
 ブラウザで `http://localhost:8000` を開く。
 
-## すぐ使うファイル（今回作成済み）
+## すぐ使うファイル（運用）
 
 - 行政区画GeoJSON: `/Users/tomoki/src/RGU/data/n03_target_admin_areas.geojson`
 - 初期割当CSV: `/Users/tomoki/src/RGU/data/asis_admin_assignments.csv`
-- 初期割当を埋め込んだGeoJSON（1ファイル版）: `/Users/tomoki/src/RGU/data/asis_admin_polygons.geojson`
 - 細粒度ポリゴン（町丁目ベース, asis反映済み）: `/Users/tomoki/src/RGU/data/asis_fine_polygons.geojson`
 
-この2つを順に読み込めば、東京+神奈川の対象行政区画に既存割当を反映した状態から調整を始められます。
-または、`asis_admin_polygons.geojson` だけを読み込んでも同じ初期状態で開始できます。
-細かい調整をしたい場合は `asis_fine_polygons.geojson` をGeoJSONとして読み込んでください。
+運用では `asis_fine_polygons.geojson` を読み込む前提です。
 
 ## 入力データ仕様（GeoJSON）
 
@@ -47,25 +44,9 @@ python3 -m http.server 8000
 - `area_name` / `name` / `名称`
 - `municipality` / `市区町村` / `市区` / `N03_004` / `N03_005` / `対応エリア`
 
-補足:
-- 国土数値情報 `N03` では、政令市の区は `N03_004=市名` + `N03_005=区名` で保持されるため、アプリ側で `横浜市緑区` のように連結して扱います。
-
 初期割当（任意）:
 - `depot_code` / `depot` / `管轄デポ` / `担当デポ`
 - 値は `SGM`,`FUJ`,`YOK` 推奨（`相模原`,`藤沢`,`横浜港北(...)` も自動変換）
-
-## 割当CSV読込仕様
-
-以下のどちらかでエリアを特定できます。
-
-- `area_id` 系列（`area_id`,`area_code`,`N03_007`,`zip_code` など）
-- `area_name` 系列（`area_name`,`name`,`名称`,`municipality`,`市区`,`対応エリア` など）
-
-デポ列:
-- `depot_code` / `depot` / `管轄デポ` / `担当デポ`
-
-`asis.csv` のように `市区, 管轄デポ` を持つCSVも読み込み可能です。
-同一行政区画に複数デポが混在する場合は競合として検知し、その区画は未割当にします（例: 横浜市青葉区）。
 
 ## 出力CSV
 
@@ -75,21 +56,31 @@ python3 -m http.server 8000
 - `depot_code`
 - `depot_name`
 
-## サンプルデータ
+## UI調整メモ（2026-02）
 
-- `/Users/tomoki/src/RGU/data/sample-admin-areas.geojson`
+- 塗りの透明度を下げ、ラベル可読性を優先。
+- ベースマップをラベル重視構成（CARTO light + labels）へ変更。
+- 市区境界の視認性を上げるため、境界オーバーレイを追加。
+- 運用対象外（既存 SGM/FUJ/YOK 対象外）行政区は非活性化。
 
-UIの「行政区画サンプル読込」で読み込めます。
+## data 配下の整理
+
+- 旧サンプルGeoJSONは `data/archive/` に移動。
+- 東京（町田市）町丁目データを差し込む場合は `data/tokyo/machida_towns.geojson` を配置。
 
 ## 細粒度データ再生成
 
 神奈川の町丁目KMZと `asis.csv` から細粒度ポリゴンを再生成できます。
+必要に応じて、町田市の町丁目GeoJSONを追加投入してください。
 
 ```bash
 python3 /Users/tomoki/src/RGU/scripts/build_fine_polygons_from_asis.py \
   --asis /Users/tomoki/src/RGU/asis.csv \
   --kanagawa-kmz-zip /Users/tomoki/Downloads/A002005212020DDKWC14.zip \
+  --tokyo-town-geojson /Users/tomoki/src/RGU/data/tokyo/machida_towns.geojson \
   --baseline /Users/tomoki/src/RGU/data/asis_admin_assignments.csv \
   --n03-fallback /Users/tomoki/src/RGU/data/n03_target_admin_areas.geojson \
   --out /Users/tomoki/src/RGU/data/asis_fine_polygons.geojson
 ```
+
+`--tokyo-town-geojson` が未配置の場合は、町田市のみ N03 境界（市単位）へフォールバックします。

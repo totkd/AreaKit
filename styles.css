@@ -20,7 +20,12 @@ body {
   height: 100%;
   background: radial-gradient(1200px circle at 0% 0%, #dfe8e2 0%, var(--bg) 50%, #e7ece9 100%);
   color: var(--ink);
-  font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  font-family: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+}
+
+code,
+pre {
+  font-family: "Google Sans Code", "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 .layout {
@@ -194,6 +199,10 @@ button.ghost {
   display: grid;
   gap: 6px;
   font-size: 13px;
+}
+
+.leaflet-container {
+  font-family: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
 }
 
 .dot {

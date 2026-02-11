@@ -4,6 +4,45 @@ const DEPOTS = {
   YOK: { name: "横浜港北デポ YOK", color: "#b71c1c" },
 };
 
+const DEFAULT_IN_SCOPE_MUNICIPALITIES = new Set([
+  "大和市",
+  "川崎市中原区",
+  "川崎市多摩区",
+  "川崎市宮前区",
+  "川崎市川崎区",
+  "川崎市幸区",
+  "川崎市高津区",
+  "川崎市麻生区",
+  "平塚市",
+  "座間市",
+  "横浜市中区",
+  "横浜市保土ケ谷区",
+  "横浜市南区",
+  "横浜市戸塚区",
+  "横浜市旭区",
+  "横浜市栄区",
+  "横浜市泉区",
+  "横浜市港北区",
+  "横浜市港南区",
+  "横浜市瀬谷区",
+  "横浜市磯子区",
+  "横浜市神奈川区",
+  "横浜市緑区",
+  "横浜市西区",
+  "横浜市都筑区",
+  "横浜市金沢区",
+  "横浜市青葉区",
+  "横浜市鶴見区",
+  "海老名市",
+  "町田市",
+  "相模原市中央区",
+  "相模原市南区",
+  "綾瀬市",
+  "茅ヶ崎市",
+  "藤沢市",
+  "鎌倉市",
+]);
+
 const ZIP_KEYS = ["zip_code", "zipcode", "zip", "postal_code", "郵便番号"];
 const AREA_ID_KEYS = ["area_id", "area_code", "code", "id", "N03_007", ...ZIP_KEYS];
 const AREA_NAME_KEYS = [
@@ -18,10 +57,6 @@ const AREA_NAME_KEYS = [
   "N03_003",
 ];
 const MUNICIPALITY_KEYS = ["municipality", "city", "ward", "自治体", "市区町村", "市区", "対応エリア", "N03_004"];
-const AREA_HEADER_KEYS = ["area_id", "area_code", "id", "code", "N03_007", ...ZIP_KEYS];
-const AREA_NAME_HEADER_KEYS = ["area_name", "name", "名称", "municipality", "市区町村", "市区", "対応エリア"];
-const DEPOT_HEADER_KEYS = ["depot_code", "depot", "担当デポ", "管轄デポ"];
-
 const state = {
   map: null,
   geoLayer: null,
@@ -31,12 +66,12 @@ const state = {
   assignments: new Map(),
   selected: new Set(),
   currentFilterMunicipality: "",
+  inScopeMunicipalities: new Set(DEFAULT_IN_SCOPE_MUNICIPALITIES),
+  municipalityBoundaryLayer: null,
 };
 
 const el = {
   geoInput: document.getElementById("geojson-input"),
-  csvInput: document.getElementById("csv-input"),
-  loadSample: document.getElementById("load-sample"),
   municipalityFilter: document.getElementById("municipality-filter"),
   areaSearch: document.getElementById("zip-search"),
   jumpArea: document.getElementById("jump-zip"),
@@ -52,14 +87,21 @@ init();
 
 function init() {
   state.map = L.map("map", { zoomControl: true }).setView([35.45, 139.55], 11);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 18,
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 20,
+  }).addTo(state.map);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+    pane: "overlayPane",
+    opacity: 0.95,
+    maxZoom: 20,
   }).addTo(state.map);
 
+  loadInScopeMunicipalities();
+
   el.geoInput.addEventListener("change", handleGeoJsonFile);
-  el.csvInput.addEventListener("change", handleCsvFile);
-  el.loadSample.addEventListener("click", loadSampleGeoJson);
   el.municipalityFilter.addEventListener("change", () => {
     state.currentFilterMunicipality = el.municipalityFilter.value;
     refreshAllStyles();
@@ -83,24 +125,26 @@ function init() {
   renderStats();
 }
 
-async function loadSampleGeoJson() {
-  const candidates = ["./data/sample-admin-areas.geojson", "./data/sample-postal-areas.geojson"];
-  let lastError = "";
-  for (const path of candidates) {
-    try {
-      const res = await fetch(path);
-      if (!res.ok) {
-        lastError = `${path}: ${res.status}`;
-        continue;
-      }
-      const data = await res.json();
-      loadGeoJson(data);
+async function loadInScopeMunicipalities() {
+  try {
+    const res = await fetch("./data/n03_target_admin_areas.geojson");
+    if (!res.ok) {
       return;
-    } catch (err) {
-      lastError = err.message;
     }
+    const data = await res.json();
+    if (!Array.isArray(data?.features)) {
+      return;
+    }
+    const values = data.features
+      .map((feature) => String(feature?.properties?.municipality || "").trim())
+      .filter(Boolean);
+    if (values.length > 0) {
+      state.inScopeMunicipalities = new Set(values);
+      // 運用対象外を視覚的に抑制し、選択・割当を禁止するための基準。
+    }
+  } catch (_err) {
+    // 取得不可時は既定値(DEFAULT_IN_SCOPE_MUNICIPALITIES)を利用。
   }
-  alert(`サンプル読込に失敗しました。${lastError}`);
 }
 
 function handleGeoJsonFile(event) {
@@ -116,18 +160,6 @@ function handleGeoJsonFile(event) {
     } catch (_err) {
       alert("GeoJSONの読み込みに失敗しました。JSON形式を確認してください。");
     }
-  };
-  reader.readAsText(file, "utf-8");
-}
-
-function handleCsvFile(event) {
-  const file = event.target.files?.[0];
-  if (!file) {
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    applyAssignmentsCsv(String(reader.result));
   };
   reader.readAsText(file, "utf-8");
 }
@@ -180,12 +212,15 @@ function loadGeoJson(data) {
       const initialDepot = extractDepot(props);
       state.assignments.set(areaId, initialDepot || currentDepot);
 
-      layer.on("click", () => toggleAreaSelection(areaId));
+      if (isInScopeArea(areaId)) {
+        layer.on("click", () => toggleAreaSelection(areaId));
+      }
       layer.bindTooltip(tooltipText(areaId), { sticky: true });
     },
   }).addTo(state.map);
 
   rebuildNameIndex();
+  drawMunicipalityBoundaryLayer(data);
 
   const bounds = state.geoLayer.getBounds();
   if (bounds.isValid()) {
@@ -328,14 +363,15 @@ function styleForArea(areaId) {
   const depot = DEPOTS[assignment];
   const baseColor = depot ? depot.color : "#aeb8c3";
   const isFilteredOut = isFilteredOutByMunicipality(areaId);
+  const isOutOfScope = !isInScopeArea(areaId);
 
   return {
-    color: selected ? "#101114" : "#4e5967",
-    weight: selected ? 3 : 1,
-    dashArray: selected ? "5 4" : "",
+    color: isOutOfScope ? "#8e96a1" : selected ? "#101114" : "#4e5967",
+    weight: isOutOfScope ? 0.8 : selected ? 2.4 : 1.3,
+    dashArray: isOutOfScope ? "3 6" : selected ? "5 4" : "",
     fillColor: baseColor,
-    fillOpacity: isFilteredOut ? 0.08 : selected ? 0.78 : 0.55,
-    opacity: isFilteredOut ? 0.25 : 0.9,
+    fillOpacity: isOutOfScope ? 0.06 : isFilteredOut ? 0.04 : selected ? 0.36 : 0.22,
+    opacity: isOutOfScope ? 0.32 : isFilteredOut ? 0.2 : 0.95,
   };
 }
 
@@ -348,6 +384,34 @@ function isFilteredOutByMunicipality(areaId) {
   return municipality !== current;
 }
 
+function isInScopeArea(areaId) {
+  const municipality = String(state.areaMeta.get(areaId)?.municipality || "").trim();
+  if (!municipality) {
+    return true;
+  }
+  return state.inScopeMunicipalities.has(municipality);
+}
+
+function drawMunicipalityBoundaryLayer(data) {
+  if (state.municipalityBoundaryLayer) {
+    state.map.removeLayer(state.municipalityBoundaryLayer);
+  }
+
+  state.municipalityBoundaryLayer = L.geoJSON(data, {
+    style: () => ({
+      color: "#232830",
+      weight: 2.3,
+      opacity: 0.8,
+      fillOpacity: 0,
+      interactive: false,
+    }),
+    filter: (feature) => {
+      const municipality = String(feature?.properties?.municipality || composeN03Name(feature?.properties || {})).trim();
+      return state.inScopeMunicipalities.has(municipality);
+    },
+  }).addTo(state.map);
+}
+
 function refreshAllStyles() {
   state.areaToLayers.forEach((layers, areaId) => {
     layers.forEach((layer) => layer.setStyle(styleForArea(areaId)));
@@ -356,7 +420,7 @@ function refreshAllStyles() {
 }
 
 function toggleAreaSelection(areaId) {
-  if (!state.areaToLayers.has(areaId)) {
+  if (!state.areaToLayers.has(areaId) || !isInScopeArea(areaId)) {
     return;
   }
   if (state.selected.has(areaId)) {
@@ -389,6 +453,9 @@ function assignSelected(depotCode) {
     return;
   }
   state.selected.forEach((areaId) => {
+    if (!isInScopeArea(areaId)) {
+      return;
+    }
     state.assignments.set(areaId, depotCode);
   });
   refreshAllStyles();
@@ -400,7 +467,12 @@ function clearAssignmentForSelected() {
     alert("先にエリアを選択してください。");
     return;
   }
-  state.selected.forEach((areaId) => state.assignments.set(areaId, ""));
+  state.selected.forEach((areaId) => {
+    if (!isInScopeArea(areaId)) {
+      return;
+    }
+    state.assignments.set(areaId, "");
+  });
   refreshAllStyles();
   renderStats();
 }
@@ -436,6 +508,9 @@ function handleAreaJump() {
 
   const bounds = L.latLngBounds();
   candidates.forEach((areaId) => {
+    if (!isInScopeArea(areaId)) {
+      return;
+    }
     state.selected.add(areaId);
     state.areaToLayers.get(areaId)?.forEach((layer) => {
       layer.setStyle(styleForArea(areaId));
@@ -547,124 +622,6 @@ function canonicalAreaName(value) {
     out = out.replace(/^相模原/, "相模原市");
   }
   return out;
-}
-
-function applyAssignmentsCsv(text) {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length < 2) {
-    alert("CSVにデータ行がありません。");
-    return;
-  }
-
-  const headers = splitCsvLine(lines[0]).map(normalizeHeader);
-  const areaIdIndexes = headers
-    .map((h, idx) => (AREA_HEADER_KEYS.some((key) => normalizeHeader(key) === h) ? idx : -1))
-    .filter((idx) => idx !== -1);
-  const areaNameIndexes = headers
-    .map((h, idx) => (AREA_NAME_HEADER_KEYS.some((key) => normalizeHeader(key) === h) ? idx : -1))
-    .filter((idx) => idx !== -1);
-  const depotIndex = headers.findIndex((h) => DEPOT_HEADER_KEYS.some((key) => normalizeHeader(key) === h));
-
-  if ((areaIdIndexes.length === 0 && areaNameIndexes.length === 0) || depotIndex === -1) {
-    alert("CSVヘッダに area_id（または area_name 系）と depot_code（または同等列）が必要です。");
-    return;
-  }
-
-  const csvDepotByArea = new Map();
-  const conflicts = new Map();
-
-  for (let i = 1; i < lines.length; i += 1) {
-    const cols = splitCsvLine(lines[i]);
-    const depot = normalizeDepotCode(cols[depotIndex] || "");
-    if (!depot) {
-      continue;
-    }
-
-    const candidates = new Set();
-    areaIdIndexes.forEach((idx) => {
-      resolveAreaIdsByKey(cols[idx] || "").forEach((areaId) => candidates.add(areaId));
-    });
-    areaNameIndexes.forEach((idx) => {
-      resolveAreaIdsByKey(cols[idx] || "").forEach((areaId) => candidates.add(areaId));
-    });
-
-    candidates.forEach((areaId) => {
-      if (!state.assignments.has(areaId)) {
-        return;
-      }
-      if (!csvDepotByArea.has(areaId)) {
-        csvDepotByArea.set(areaId, depot);
-        return;
-      }
-      const prev = csvDepotByArea.get(areaId);
-      if (prev !== depot) {
-        if (!conflicts.has(areaId)) {
-          conflicts.set(areaId, new Set([prev]));
-        }
-        conflicts.get(areaId).add(depot);
-      }
-    });
-  }
-
-  let applied = 0;
-  const conflicted = [];
-  csvDepotByArea.forEach((depot, areaId) => {
-    if (conflicts.has(areaId)) {
-      state.assignments.set(areaId, "");
-      conflicted.push(areaId);
-      return;
-    }
-    state.assignments.set(areaId, depot);
-    applied += 1;
-  });
-
-  refreshAllStyles();
-  renderStats();
-  if (conflicted.length === 0) {
-    alert(`${applied}件のエリア割当をCSVから反映しました。`);
-    return;
-  }
-
-  const preview = conflicted
-    .slice(0, 8)
-    .map((areaId) => state.areaMeta.get(areaId)?.name || areaId)
-    .join("、");
-  alert(
-    `${applied}件を反映しました。${conflicted.length}件は複数デポが混在していたため未割当にしています。` +
-      `（例: ${preview}${conflicted.length > 8 ? " ほか" : ""}）`
-  );
-}
-
-function splitCsvLine(line) {
-  const out = [];
-  let cell = "";
-  let quoted = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (quoted && line[i + 1] === '"') {
-        cell += '"';
-        i += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (ch === "," && !quoted) {
-      out.push(cell);
-      cell = "";
-    } else {
-      cell += ch;
-    }
-  }
-  out.push(cell);
-  return out;
-}
-
-function normalizeHeader(value) {
-  return String(value || "")
-    .replace(/^\uFEFF/, "")
-    .trim()
-    .toLowerCase();
 }
 
 function exportAssignmentsCsv() {
