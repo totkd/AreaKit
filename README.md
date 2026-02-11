@@ -4,10 +4,10 @@
 
 ## できること
 
-- 行政区画 GeoJSON（Polygon/MultiPolygon）を読み込み
+- 起動時に `data/asis_fine_polygons.geojson` を自動読み込み
 - ポリゴンをクリック選択して `SGM / FUJ / YOK` に割当
 - クリック時に「対応エリア」（`asis.csv` 由来）をポップアップ表示
-- ベースマップ切替（地理院標準/地理院淡色/OSM/CARTO）
+- ベースマップ切替（地理院標準/地理院淡色/地理院写真/OSM/CARTO/Esri）
 - サイドバーの表示/非表示切替
 - SGM/FUJ/YOK 拠点ピンを固定表示
 - 自治体フィルタ、エリアID/名称ジャンプ
@@ -22,6 +22,7 @@ python3 -m http.server 8000
 ```
 
 ブラウザで `http://localhost:8000` を開く。
+起動すると、`data/asis_fine_polygons.geojson` が自動で地図に反映されます。
 
 ## すぐ使うファイル（運用）
 
@@ -29,7 +30,7 @@ python3 -m http.server 8000
 - 初期割当CSV: `/Users/tomoki/src/RGU/data/asis_admin_assignments.csv`
 - 細粒度ポリゴン（町丁目ベース, asis反映済み）: `/Users/tomoki/src/RGU/data/asis_fine_polygons.geojson`
 
-運用では `asis_fine_polygons.geojson` を読み込む前提です。
+運用では `asis_fine_polygons.geojson` をデフォルトデータとして使います。
 
 ## 入力データ仕様（GeoJSON）
 
@@ -64,7 +65,7 @@ python3 -m http.server 8000
 
 - 塗りと境界線のコントラストを再調整し、道路・地名ラベルを優先。
 - デフォルトの地図を地理院標準（日本語）へ変更し、タイル切替を追加。
-- 市区境界を町域境界より太く濃い色でオーバーレイ。
+- 市区境界を町域境界より太く濃い色でオーバーレイし、ズームに応じて境界線を強調。
 - 運用対象外（既存 SGM/FUJ/YOK 対象外）行政区は非活性化。
 
 ## data 配下の整理

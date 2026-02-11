@@ -29,22 +29,16 @@
           <fieldset id="basemap-options" class="radio-group">
             <label><input type="radio" name="basemap" value="gsi_std" checked /> 地理院 標準（日本語）</label>
             <label><input type="radio" name="basemap" value="gsi_pale" /> 地理院 淡色</label>
+            <label><input type="radio" name="basemap" value="gsi_seamless" /> 地理院 シームレス写真</label>
             <label><input type="radio" name="basemap" value="osm" /> OpenStreetMap</label>
             <label><input type="radio" name="basemap" value="carto" /> CARTO Voyager</label>
+            <label><input type="radio" name="basemap" value="carto_light" /> CARTO Positron</label>
+            <label><input type="radio" name="basemap" value="esri_street" /> Esri World Street</label>
           </fieldset>
         </section>
 
         <section class="card">
-          <h2>1. データ読込</h2>
-          <label class="field">
-            <span>行政区画 GeoJSON</span>
-            <input id="geojson-input" type="file" accept=".geojson,.json,application/geo+json,application/json" />
-          </label>
-          <p class="small">運用では asis 反映済み GeoJSON を読み込んで編集してください。</p>
-        </section>
-
-        <section class="card">
-          <h2>2. 選択条件</h2>
+          <h2>1. 選択条件</h2>
           <label class="field">
             <span>自治体フィルタ</span>
             <select id="municipality-filter">
@@ -62,7 +56,7 @@
         </section>
 
         <section class="card">
-          <h2>3. デポ割当</h2>
+          <h2>2. デポ割当</h2>
           <p id="selected-count">選択中: 0件</p>
           <div class="depot-actions">
             <button class="depot-btn depot-sgm" type="button" data-depot="SGM">相模原デポ SGM</button>
@@ -73,7 +67,7 @@
         </section>
 
         <section class="card">
-          <h2>4. 出力</h2>
+          <h2>3. 出力</h2>
           <button id="export-csv" type="button">CSV出力</button>
           <p class="small">出力列: <code>area_id,area_name,municipality,depot_code,depot_name</code></p>
         </section>

@@ -44,6 +44,15 @@ const BASEMAPS = {
       maxZoom: 18,
     },
   },
+  gsi_seamless: {
+    name: "地理院 シームレス写真",
+    url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",
+    options: {
+      attribution:
+        '<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>',
+      maxZoom: 18,
+    },
+  },
   osm: {
     name: "OpenStreetMap",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -60,6 +69,23 @@ const BASEMAPS = {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
       maxZoom: 20,
+    },
+  },
+  carto_light: {
+    name: "CARTO Positron",
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    options: {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 20,
+    },
+  },
+  esri_street: {
+    name: "Esri World Street",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    options: {
+      attribution: "Tiles &copy; Esri",
+      maxZoom: 19,
     },
   },
 };
@@ -141,7 +167,6 @@ const state = {
 const el = {
   layout: document.getElementById("layout"),
   panelToggle: document.getElementById("panel-toggle"),
-  geoInput: document.getElementById("geojson-input"),
   municipalityFilter: document.getElementById("municipality-filter"),
   areaSearch: document.getElementById("zip-search"),
   jumpArea: document.getElementById("jump-zip"),
@@ -163,6 +188,7 @@ function init() {
 
   loadInScopeMunicipalities();
   loadAsisAreaLabels();
+  loadDefaultGeoJson();
 
   renderSelected();
   renderStats();
@@ -185,8 +211,6 @@ function initMap() {
 }
 
 function setupEventHandlers() {
-  el.geoInput.addEventListener("change", handleGeoJsonFile);
-
   el.municipalityFilter.addEventListener("change", () => {
     state.currentFilterMunicipality = el.municipalityFilter.value;
     refreshAllStyles();
@@ -217,6 +241,36 @@ function setupEventHandlers() {
 
   document.querySelectorAll(".depot-btn").forEach((btn) => {
     btn.addEventListener("click", () => assignSelected(btn.dataset.depot));
+  });
+
+  state.map.on("zoomend", () => {
+    refreshAllStyles();
+    refreshMunicipalityBoundaryStyle();
+  });
+  state.map.on("zoomstart", closeAllAreaTooltips);
+  state.map.on("movestart", closeAllAreaTooltips);
+}
+
+async function loadDefaultGeoJson() {
+  try {
+    const res = await fetch("./data/asis_fine_polygons.geojson");
+    if (!res.ok) {
+      throw new Error(`status ${res.status}`);
+    }
+    const data = await res.json();
+    loadGeoJson(data);
+  } catch (_err) {
+    alert("既定データ(data/asis_fine_polygons.geojson)の読み込みに失敗しました。");
+  }
+}
+
+function closeAllAreaTooltips() {
+  state.areaToLayers.forEach((layers) => {
+    layers.forEach((layer) => {
+      if (typeof layer.closeTooltip === "function") {
+        layer.closeTooltip();
+      }
+    });
   });
 }
 
@@ -515,24 +569,6 @@ function applyAsisAreaLabelsToLoadedAreas() {
   });
 }
 
-function handleGeoJsonFile(event) {
-  const file = event.target.files?.[0];
-  if (!file) {
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(String(reader.result));
-      loadGeoJson(data);
-    } catch (_err) {
-      alert("GeoJSONの読み込みに失敗しました。JSON形式を確認してください。");
-    }
-  };
-  reader.readAsText(file, "utf-8");
-}
-
 function loadGeoJson(data) {
   if (!data || data.type !== "FeatureCollection" || !Array.isArray(data.features)) {
     alert("FeatureCollection形式のGeoJSONを指定してください。");
@@ -592,7 +628,13 @@ function loadGeoJson(data) {
       state.assignments.set(areaId, initialDepot || currentDepot);
 
       layer.on("click", () => handleAreaClick(areaId, layer));
-      layer.bindTooltip(tooltipText(areaId), { sticky: true });
+      layer.bindTooltip(tooltipText(areaId), {
+        sticky: false,
+        direction: "top",
+        opacity: 0.94,
+      });
+      layer.on("mouseout", () => layer.closeTooltip());
+      layer.on("remove", () => layer.closeTooltip());
     },
   }).addTo(state.map);
 
@@ -831,29 +873,23 @@ function tooltipText(areaId) {
   if (!meta) {
     return formatAreaIdForDisplay(areaId);
   }
-
-  const parts = [meta.name || "", meta.dispatchAreaLabel || "", meta.municipality || ""].filter(Boolean);
-  return parts.join(" / ");
+  return meta.name || formatAreaIdForDisplay(areaId);
 }
 
 function buildPopupHtml(areaId) {
   const meta = state.areaMeta.get(areaId);
   if (!meta) {
-    return `<div class="popup-grid"><dt>ID</dt><dd>${escapeHtml(formatAreaIdForDisplay(areaId))}</dd></div>`;
+    return `<div class="popup-grid"><dt>町域</dt><dd>${escapeHtml(formatAreaIdForDisplay(areaId))}</dd></div>`;
   }
 
   const depotCode = state.assignments.get(areaId) || "";
   const depotName = DEPOTS[depotCode]?.name || "未割当";
-  const scopeText = isInScopeArea(areaId) ? "運用対象" : "運用対象外（選択不可）";
 
   return [
     '<dl class="popup-grid">',
     `<dt>町域</dt><dd>${escapeHtml(meta.name || "-")}</dd>`,
     `<dt>対応エリア</dt><dd>${escapeHtml(meta.dispatchAreaLabel || "-")}</dd>`,
-    `<dt>市区</dt><dd>${escapeHtml(meta.municipality || "-")}</dd>`,
-    `<dt>ID</dt><dd>${escapeHtml(formatAreaIdForDisplay(areaId) || "-")}</dd>`,
     `<dt>割当デポ</dt><dd>${escapeHtml(depotName)}</dd>`,
-    `<dt>状態</dt><dd>${escapeHtml(scopeText)}</dd>`,
     "</dl>",
   ].join("");
 }
@@ -868,6 +904,9 @@ function escapeHtml(value) {
 }
 
 function styleForArea(areaId) {
+  const zoom = state.map ? state.map.getZoom() : 11;
+  const zoomFactor = Math.max(0, zoom - 10);
+  const borderBoost = Math.min(1.1, zoomFactor * 0.1);
   const selected = state.selected.has(areaId);
   const assignment = state.assignments.get(areaId);
   const depot = DEPOTS[assignment];
@@ -877,11 +916,11 @@ function styleForArea(areaId) {
 
   return {
     color: isOutOfScope ? "#7c8591" : selected ? "#0f1720" : "#44566c",
-    weight: isOutOfScope ? 0.6 : selected ? 2.1 : 0.95,
+    weight: isOutOfScope ? 0.9 + borderBoost * 0.4 : selected ? 2.5 + borderBoost * 0.8 : 1.25 + borderBoost * 0.7,
     dashArray: isOutOfScope ? "3 5" : selected ? "4 3" : "",
     fillColor: baseColor,
     fillOpacity: isOutOfScope ? 0.02 : isFilteredOut ? 0.015 : selected ? 0.3 : 0.12,
-    opacity: isOutOfScope ? 0.24 : isFilteredOut ? 0.17 : 0.78,
+    opacity: isOutOfScope ? 0.28 : isFilteredOut ? 0.19 : 0.86,
   };
 }
 
@@ -920,13 +959,7 @@ async function drawMunicipalityBoundaryLayer(fallbackData) {
 
   state.municipalityBoundaryLayer = L.geoJSON(sourceData, {
     pane: "municipalityBoundaryPane",
-    style: () => ({
-      color: "#101e37",
-      weight: 3,
-      opacity: 0.92,
-      fillOpacity: 0,
-      interactive: false,
-    }),
+    style: () => getMunicipalityBoundaryStyle(),
     filter: (feature) => {
       const municipality = canonicalMunicipality(getMunicipalityFromProps(feature?.properties || {}));
       if (!municipality || !state.inScopeMunicipalities.has(municipality)) {
@@ -938,6 +971,25 @@ async function drawMunicipalityBoundaryLayer(fallbackData) {
 
   state.municipalityBoundaryLayer.bringToFront();
   state.depotMarkerLayer?.bringToFront();
+}
+
+function getMunicipalityBoundaryStyle() {
+  const zoom = state.map ? state.map.getZoom() : 11;
+  const zoomFactor = Math.max(0, zoom - 10);
+  return {
+    color: "#071632",
+    weight: 4.2 + Math.min(2.6, zoomFactor * 0.35),
+    opacity: 0.96,
+    fillOpacity: 0,
+    interactive: false,
+  };
+}
+
+function refreshMunicipalityBoundaryStyle() {
+  if (!state.municipalityBoundaryLayer) {
+    return;
+  }
+  state.municipalityBoundaryLayer.setStyle(getMunicipalityBoundaryStyle());
 }
 
 async function getMunicipalityBoundarySource() {
