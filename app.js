@@ -154,9 +154,9 @@ const state = {
   nameIndex: new Map(),
   assignments: new Map(),
   initialAssignments: new Map(),
-  assignmentHistory: [],
-  assignmentHistoryIndex: -1,
   selected: new Set(),
+  selectionHistory: [],
+  selectionHistoryIndex: -1,
   inScopeMunicipalities: new Set(DEFAULT_IN_SCOPE_MUNICIPALITIES),
   municipalityBoundaryLayer: null,
   municipalityBoundarySource: null,
@@ -196,7 +196,7 @@ function init() {
 }
 
 function initMap() {
-  state.map = L.map("map", { zoomControl: true }).setView([35.45, 139.55], 11);
+  state.map = L.map("map", { zoomControl: true, boxZoom: false }).setView([35.45, 139.55], 11);
 
   state.map.createPane("municipalityBoundaryPane");
   state.map.getPane("municipalityBoundaryPane").style.zIndex = "520";
@@ -213,8 +213,8 @@ function initMap() {
 
 function setupEventHandlers() {
   el.exportCsv.addEventListener("click", exportAssignmentsCsv);
-  el.undoAction?.addEventListener("click", undoAssignments);
-  el.redoAction?.addEventListener("click", redoAssignments);
+  el.undoAction?.addEventListener("click", undoSelection);
+  el.redoAction?.addEventListener("click", redoSelection);
   el.resetAll?.addEventListener("click", resetAllAssignments);
 
   el.panelToggle.addEventListener("click", toggleSidebar);
@@ -711,19 +711,21 @@ function loadGeoJson(data) {
   }
 
   state.initialAssignments = new Map(state.assignments);
-  resetAssignmentHistory();
+  resetSelectionHistory();
   refreshAllStyles();
   renderSelected();
   renderStats();
 }
 
 function handleAreaClick(areaId, layer) {
+  let changedSelection = false;
   if (isInScopeArea(areaId)) {
     if (state.selected.has(areaId)) {
       state.selected.delete(areaId);
     } else {
       state.selected.add(areaId);
     }
+    changedSelection = true;
 
     state.areaToLayers.get(areaId)?.forEach((entry) => {
       entry.setStyle(styleForArea(areaId));
@@ -739,6 +741,10 @@ function handleAreaClick(areaId, layer) {
     layer.bindPopup(content, { maxWidth: 360 });
   }
   layer.openPopup();
+
+  if (changedSelection) {
+    pushSelectionHistory();
+  }
 }
 
 function getAreaId(props) {
@@ -1023,16 +1029,15 @@ function styleForArea(areaId) {
   const depot = DEPOTS[assignment];
   const baseColor = depot ? depot.color : "#9ea8b6";
   const isOutOfScope = !isInScopeArea(areaId);
-  const isFuj = assignment === "FUJ";
   const activeFill = selected ? 0.3 : 0.12;
-  const fujBoost = isFuj ? (selected ? 0.08 : 0.04) : 0;
+  const fujScale = assignment === "FUJ" ? 0.78 : 1;
 
   return {
     color: isOutOfScope ? "#7c8591" : selected ? "#0f1720" : "#44566c",
     weight: isOutOfScope ? 0.9 + borderBoost * 0.4 : selected ? 2.5 + borderBoost * 0.8 : 1.25 + borderBoost * 0.7,
     dashArray: isOutOfScope ? "3 5" : selected ? "4 3" : "",
     fillColor: baseColor,
-    fillOpacity: isOutOfScope ? 0.02 : activeFill + fujBoost,
+    fillOpacity: isOutOfScope ? 0.02 : activeFill * fujScale,
     opacity: isOutOfScope ? 0.28 : 0.86,
   };
 }
@@ -1135,6 +1140,7 @@ function toggleAreaSelection(areaId) {
   }
   state.areaToLayers.get(areaId).forEach((layer) => layer.setStyle(styleForArea(areaId)));
   renderSelected();
+  pushSelectionHistory();
 }
 
 function clearSelection() {
@@ -1147,6 +1153,7 @@ function clearSelection() {
     state.areaToLayers.get(areaId)?.forEach((layer) => layer.setStyle(styleForArea(areaId)));
   });
   renderSelected();
+  pushSelectionHistory();
 }
 
 function assignSelected(depotCode) {
@@ -1182,7 +1189,6 @@ function assignSelected(depotCode) {
   }
 
   refreshAllStyles();
-  pushAssignmentHistory();
 }
 
 function createAssignmentSnapshot() {
@@ -1201,33 +1207,49 @@ function isSameAssignmentSnapshot(a, b) {
   return true;
 }
 
-function resetAssignmentHistory() {
-  state.assignmentHistory = [createAssignmentSnapshot()];
-  state.assignmentHistoryIndex = 0;
+function createSelectionSnapshot() {
+  return [...state.selected].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
+function isSameSelectionSnapshot(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function resetSelectionHistory() {
+  state.selectionHistory = [createSelectionSnapshot()];
+  state.selectionHistoryIndex = 0;
   updateHistoryButtons();
 }
 
-function pushAssignmentHistory() {
-  const snapshot = createAssignmentSnapshot();
-  const current = state.assignmentHistory[state.assignmentHistoryIndex];
-  if (current && isSameAssignmentSnapshot(current, snapshot)) {
+function pushSelectionHistory() {
+  const snapshot = createSelectionSnapshot();
+  const current = state.selectionHistory[state.selectionHistoryIndex];
+  if (current && isSameSelectionSnapshot(current, snapshot)) {
     return;
   }
-  if (state.assignmentHistoryIndex < state.assignmentHistory.length - 1) {
-    state.assignmentHistory = state.assignmentHistory.slice(0, state.assignmentHistoryIndex + 1);
+  if (state.selectionHistoryIndex < state.selectionHistory.length - 1) {
+    state.selectionHistory = state.selectionHistory.slice(0, state.selectionHistoryIndex + 1);
   }
-  state.assignmentHistory.push(snapshot);
-  state.assignmentHistoryIndex = state.assignmentHistory.length - 1;
+  state.selectionHistory.push(snapshot);
+  state.selectionHistoryIndex = state.selectionHistory.length - 1;
   updateHistoryButtons();
 }
 
-function applyAssignmentSnapshot(snapshot) {
-  if (!snapshot) {
+function applySelectionSnapshot(snapshot) {
+  if (!Array.isArray(snapshot)) {
     return;
   }
-  state.assignments = new Map(snapshot);
+  state.selected = new Set(snapshot);
   refreshAllStyles();
-  syncPopupContentForAllAreas();
+  renderSelected();
 }
 
 function syncPopupContentForAllAreas() {
@@ -1240,21 +1262,21 @@ function syncPopupContentForAllAreas() {
   });
 }
 
-function undoAssignments() {
-  if (state.assignmentHistoryIndex <= 0) {
+function undoSelection() {
+  if (state.selectionHistoryIndex <= 0) {
     return;
   }
-  state.assignmentHistoryIndex -= 1;
-  applyAssignmentSnapshot(state.assignmentHistory[state.assignmentHistoryIndex]);
+  state.selectionHistoryIndex -= 1;
+  applySelectionSnapshot(state.selectionHistory[state.selectionHistoryIndex]);
   updateHistoryButtons();
 }
 
-function redoAssignments() {
-  if (state.assignmentHistoryIndex >= state.assignmentHistory.length - 1) {
+function redoSelection() {
+  if (state.selectionHistoryIndex >= state.selectionHistory.length - 1) {
     return;
   }
-  state.assignmentHistoryIndex += 1;
-  applyAssignmentSnapshot(state.assignmentHistory[state.assignmentHistoryIndex]);
+  state.selectionHistoryIndex += 1;
+  applySelectionSnapshot(state.selectionHistory[state.selectionHistoryIndex]);
   updateHistoryButtons();
 }
 
@@ -1262,22 +1284,20 @@ function resetAllAssignments() {
   if (state.areaMeta.size === 0) {
     return;
   }
-  const snapshot = new Map(state.initialAssignments);
-  if (isSameAssignmentSnapshot(snapshot, createAssignmentSnapshot())) {
-    return;
-  }
-  state.assignments = snapshot;
+  state.assignments = new Map(state.initialAssignments);
+  state.selected.clear();
   refreshAllStyles();
   syncPopupContentForAllAreas();
-  pushAssignmentHistory();
+  renderSelected();
+  resetSelectionHistory();
 }
 
 function updateHistoryButtons() {
   if (el.undoAction) {
-    el.undoAction.disabled = state.assignmentHistoryIndex <= 0;
+    el.undoAction.disabled = state.selectionHistoryIndex <= 0;
   }
   if (el.redoAction) {
-    el.redoAction.disabled = state.assignmentHistoryIndex >= state.assignmentHistory.length - 1;
+    el.redoAction.disabled = state.selectionHistoryIndex >= state.selectionHistory.length - 1;
   }
 }
 
