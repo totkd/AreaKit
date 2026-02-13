@@ -34,6 +34,7 @@ pre {
   display: grid;
   grid-template-columns: 336px minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
   transition: grid-template-columns 0.2s ease;
 }
 
@@ -320,6 +321,7 @@ button.ghost.danger {
 #map {
   width: 100%;
   height: 100vh;
+  height: 100dvh;
 }
 
 .panel-toggle {
@@ -329,6 +331,21 @@ button.ghost.danger {
   z-index: 1200;
   background: #0e1117;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.panel-backdrop {
+  display: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: rgba(8, 11, 18, 0.28);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel-backdrop:hover,
+.panel-backdrop:active {
+  transform: none;
 }
 
 .legend {
@@ -435,7 +452,89 @@ button.ghost.danger {
   display: none !important;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: 1fr;
+    min-height: 100dvh;
+  }
+
+  .layout.panel-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(360px, 88vw);
+    z-index: 1400;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    max-height: none;
+    padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+    box-shadow: 14px 0 28px rgba(8, 12, 20, 0.22);
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+    transition: transform 0.22s ease, opacity 0.2s ease;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .layout.panel-collapsed .panel {
+    transform: translateX(calc(-100% - 12px));
+    opacity: 0;
+    pointer-events: none;
+    padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+    border-right-width: 1px;
+  }
+
+  .map-wrap {
+    min-height: 100dvh;
+  }
+
+  #map {
+    height: 100dvh;
+  }
+
+  .panel-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 0.2s ease;
+  }
+
+  .layout.panel-collapsed .panel-backdrop {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .panel-toggle {
+    left: max(10px, calc(8px + env(safe-area-inset-left)));
+    top: max(10px, calc(8px + env(safe-area-inset-top)));
+    z-index: 1500;
+    min-height: 42px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .legend {
+    right: max(8px, calc(8px + env(safe-area-inset-right)));
+    bottom: max(8px, calc(8px + env(safe-area-inset-bottom)));
+    max-width: min(72vw, 330px);
+    font-size: 12px;
+    gap: 5px;
+  }
+
+  button {
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 760px) {
   .layout {
     grid-template-columns: 1fr;
   }
@@ -445,16 +544,24 @@ button.ghost.danger {
   }
 
   .panel {
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    max-height: 52vh;
+    width: min(360px, 92vw);
+    padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
   }
 
-  #map {
-    height: 48vh;
+  .depot-actions {
+    grid-template-columns: 1fr;
   }
 
-  .layout.panel-collapsed .panel {
-    display: none;
+  .row {
+    grid-template-columns: 1fr;
+  }
+
+  .chip-title {
+    font-size: 12px;
+  }
+
+  .chip-sub,
+  .chip-meta {
+    font-size: 11px;
   }
 }
