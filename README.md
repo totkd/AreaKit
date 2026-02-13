@@ -97,6 +97,7 @@
 - `/Users/tomoki/src/RGU/app.js`: クライアントロジック
 - `/Users/tomoki/src/RGU/asis.csv`: 既存割当マスタ
 - `/Users/tomoki/src/RGU/data/asis_fine_polygons.geojson`: 運用主データ
+- `/Users/tomoki/src/RGU/data/n03_tokyo_kanagawa_admin_areas.geojson`: 東京+神奈川の市区町村境界（地図Overlay用）
 - `/Users/tomoki/src/RGU/data/n03_target_admin_areas.geojson`: 市区境界/フォールバック
 - `/Users/tomoki/src/RGU/data/asis_admin_assignments.csv`: 初期割当補助
 
@@ -132,6 +133,15 @@ python3 /Users/tomoki/src/RGU/scripts/build_fine_polygons_from_asis.py \
   --n03-fallback /Users/tomoki/src/RGU/data/n03_target_admin_areas.geojson \
   --coverage-mode full \
   --out /Users/tomoki/src/RGU/data/asis_fine_polygons.geojson
+```
+
+市区町村境界Overlayデータ（東京+神奈川）再生成:
+
+```bash
+python3 /Users/tomoki/src/RGU/scripts/build_admin_boundary_geojson.py \
+  --tokyo /Users/tomoki/src/RGU/data/n03_tokyo_kanagawa/tokyo/N03-20250101_13.geojson \
+  --kanagawa /Users/tomoki/src/RGU/data/n03_tokyo_kanagawa/kanagawa/N03-20250101_14.geojson \
+  --out /Users/tomoki/src/RGU/data/n03_tokyo_kanagawa_admin_areas.geojson
 ```
 
 ### 既知の注意点

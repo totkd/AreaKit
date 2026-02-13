@@ -144,6 +144,8 @@ const AREA_NAME_KEYS = [
 ];
 const MUNICIPALITY_KEYS = ["municipality", "city", "ward", "自治体", "市区町村", "市区", "対応エリア", "N03_004"];
 const MOBILE_BREAKPOINT_PX = 1180;
+const FULL_ADMIN_BOUNDARY_GEOJSON = "./data/n03_tokyo_kanagawa_admin_areas.geojson";
+const OPERATIONAL_ADMIN_BOUNDARY_GEOJSON = "./data/n03_target_admin_areas.geojson";
 
 const state = {
   map: null,
@@ -383,7 +385,7 @@ function initDepotMarkers() {
 
 async function loadInScopeMunicipalities() {
   try {
-    const res = await fetch("./data/n03_target_admin_areas.geojson");
+    const res = await fetch(OPERATIONAL_ADMIN_BOUNDARY_GEOJSON);
     if (!res.ok) {
       return;
     }
@@ -391,8 +393,6 @@ async function loadInScopeMunicipalities() {
     if (!Array.isArray(data?.features)) {
       return;
     }
-
-    state.municipalityBoundarySource = data;
 
     const values = data.features
       .map((feature) => canonicalMunicipality(getMunicipalityFromProps(feature?.properties || {})))
@@ -1176,7 +1176,7 @@ async function drawMunicipalityBoundaryLayer(fallbackData) {
     style: () => getMunicipalityBoundaryStyle(),
     filter: (feature) => {
       const municipality = canonicalMunicipality(getMunicipalityFromProps(feature?.properties || {}));
-      if (!municipality || !state.inScopeMunicipalities.has(municipality)) {
+      if (!municipality) {
         return false;
       }
       return loadedMunicipalities.size === 0 || loadedMunicipalities.has(municipality);
@@ -1213,19 +1213,27 @@ async function getMunicipalityBoundarySource() {
   }
 
   try {
-    const res = await fetch("./data/n03_target_admin_areas.geojson");
-    if (!res.ok) {
-      return null;
+    const paths = [FULL_ADMIN_BOUNDARY_GEOJSON, OPERATIONAL_ADMIN_BOUNDARY_GEOJSON];
+    for (const path of paths) {
+      try {
+        const res = await fetch(path);
+        if (!res.ok) {
+          continue;
+        }
+        const data = await res.json();
+        if (!Array.isArray(data?.features)) {
+          continue;
+        }
+        state.municipalityBoundarySource = data;
+        return data;
+      } catch (_innerErr) {
+        // Try next source.
+      }
     }
-    const data = await res.json();
-    if (!Array.isArray(data?.features)) {
-      return null;
-    }
-    state.municipalityBoundarySource = data;
-    return data;
   } catch (_err) {
-    return null;
+    // ignore
   }
+  return null;
 }
 
 function refreshAllStyles() {
