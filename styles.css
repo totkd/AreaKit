@@ -65,6 +65,13 @@ h1 {
   font-weight: 700;
 }
 
+.brand-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 h2 {
   margin: 0 0 10px;
   font-size: 13px;
@@ -77,10 +84,40 @@ h2 {
 }
 
 .lead {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   font-size: 13px;
   line-height: 1.5;
   color: var(--muted);
+  font-weight: 500;
+}
+
+.repo-link {
+  margin-top: 3px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  color: #6f7785;
+  text-decoration: none;
+  transition: color 0.15s ease, opacity 0.15s ease;
+  opacity: 0.94;
+}
+
+.repo-link:hover {
+  color: #4d5563;
+  opacity: 1;
+}
+
+.repo-link-icon {
+  fill: currentcolor;
+  width: 12px;
+  height: 12px;
+}
+
+.repo-link-label {
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.03em;
   font-weight: 500;
 }
 
