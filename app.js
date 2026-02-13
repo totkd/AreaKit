@@ -143,6 +143,7 @@ const AREA_NAME_KEYS = [
   "N03_003",
 ];
 const MUNICIPALITY_KEYS = ["municipality", "city", "ward", "自治体", "市区町村", "市区", "対応エリア", "N03_004"];
+const MOBILE_BREAKPOINT_PX = 1180;
 
 const state = {
   map: null,
@@ -166,11 +167,14 @@ const state = {
   asisAreaLabelByPostal: new Map(),
   asisPostalCodesByTown: new Map(),
   depotMarkerLayer: null,
+  isMobileView: false,
+  resizeTimerId: null,
 };
 
 const el = {
   layout: document.getElementById("layout"),
   panelToggle: document.getElementById("panel-toggle"),
+  panelBackdrop: document.getElementById("panel-backdrop"),
   exportCsv: document.getElementById("export-csv"),
   undoAction: document.getElementById("undo-action"),
   redoAction: document.getElementById("redo-action"),
@@ -187,6 +191,7 @@ function init() {
   initMap();
   initDepotMarkers();
   setupEventHandlers();
+  initResponsiveSidebarMode();
 
   loadInScopeMunicipalities();
   loadAsisAreaLabels();
@@ -219,7 +224,14 @@ function setupEventHandlers() {
   el.resetAll?.addEventListener("click", resetAllAssignments);
 
   el.panelToggle.addEventListener("click", toggleSidebar);
+  el.panelBackdrop?.addEventListener("click", () => {
+    if (!el.layout.classList.contains("panel-collapsed")) {
+      setSidebarCollapsed(true);
+    }
+  });
   updatePanelToggleLabel();
+
+  window.addEventListener("resize", handleViewportResize);
 
   el.basemapInputs.forEach((input) => {
     input.addEventListener("change", () => {
@@ -256,6 +268,35 @@ async function loadDefaultGeoJson() {
   }
 }
 
+function initResponsiveSidebarMode() {
+  state.isMobileView = isMobileViewport();
+  if (state.isMobileView) {
+    el.layout.classList.add("panel-collapsed");
+  } else {
+    el.layout.classList.remove("panel-collapsed");
+  }
+  updatePanelToggleLabel();
+  setTimeout(() => state.map.invalidateSize(), 120);
+}
+
+function isMobileViewport() {
+  return window.innerWidth <= MOBILE_BREAKPOINT_PX;
+}
+
+function handleViewportResize() {
+  if (state.resizeTimerId) {
+    clearTimeout(state.resizeTimerId);
+  }
+  state.resizeTimerId = setTimeout(() => state.map.invalidateSize(), 140);
+
+  const nextMobile = isMobileViewport();
+  if (nextMobile === state.isMobileView) {
+    return;
+  }
+  state.isMobileView = nextMobile;
+  setSidebarCollapsed(nextMobile);
+}
+
 function closeAllAreaTooltips() {
   state.areaToLayers.forEach((layers) => {
     layers.forEach((layer) => {
@@ -267,7 +308,11 @@ function closeAllAreaTooltips() {
 }
 
 function toggleSidebar() {
-  el.layout.classList.toggle("panel-collapsed");
+  setSidebarCollapsed(!el.layout.classList.contains("panel-collapsed"));
+}
+
+function setSidebarCollapsed(collapsed) {
+  el.layout.classList.toggle("panel-collapsed", collapsed);
   updatePanelToggleLabel();
   setTimeout(() => state.map.invalidateSize(), 220);
 }
