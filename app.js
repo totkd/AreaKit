@@ -1193,7 +1193,7 @@ function getMunicipalityBoundaryStyle() {
   const borderBoost = Math.min(1.1, zoomFactor * 0.1);
   return {
     color: "#44566c",
-    weight: 1.25 + borderBoost * 0.7,
+    weight: 2.2 + borderBoost * 1.1,
     opacity: 0.86,
     fillOpacity: 0,
     interactive: false,
