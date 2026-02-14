@@ -1,9 +1,11 @@
 # AreaKit
 
-[![Deploy](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel)](https://rgu-chi.vercel.app/)
-![App](https://img.shields.io/badge/App-AreaKit-111827)
-![Map](https://img.shields.io/badge/Map-Leaflet-199900)
-![Data](https://img.shields.io/badge/Data-GeoJSON%20%2B%20CSV-2563eb)
+[![Deploy](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&style=flat)](https://rgu-chi.vercel.app/)
+![Last Commit](https://img.shields.io/github/last-commit/totkd/RGU?logo=github&style=flat)
+![GION DELIVERY SERVICE](https://img.shields.io/badge/GION%20DELIVERY%20SERVICE-SGMDP-0ea5e9?style=flat)
+![App](https://img.shields.io/badge/App-AreaKit-111827?style=flat)
+![Map](https://img.shields.io/badge/Map-Leaflet-199900?style=flat)
+![Data](https://img.shields.io/badge/Data-GeoJSON%20%2B%20CSV-2563eb?style=flat)
 
 配送エリアを地図上で調整するための運用ツールです。  
 現在の既定データでは、**神奈川県 + 東京都 + 埼玉県 + 千葉県**の町域ポリゴンを表示し、`SGM / FUJ / YOK` の担当割当を編集してCSV出力できます。
