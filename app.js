@@ -80,6 +80,7 @@ const state = {
   selectionHistoryIndex: -1,
   inScopeMunicipalities: new Set(DEFAULT_IN_SCOPE_MUNICIPALITIES),
   municipalityBoundaryLayer: null,
+  municipalityBoundaryRenderer: null,
   municipalityBoundarySource: null,
   loadedGeoData: null,
   asisAreaLabelByTown: new Map(),
@@ -1593,6 +1594,9 @@ async function drawMunicipalityBoundaryLayer(fallbackData) {
   if (state.municipalityBoundaryLayer) {
     state.map.removeLayer(state.municipalityBoundaryLayer);
   }
+  if (!state.municipalityBoundaryRenderer) {
+    state.municipalityBoundaryRenderer = L.svg({ pane: "municipalityBoundaryPane" });
+  }
 
   const sourceData = (await getMunicipalityBoundarySource()) || fallbackData;
   if (!sourceData || !Array.isArray(sourceData.features)) {
@@ -1607,6 +1611,7 @@ async function drawMunicipalityBoundaryLayer(fallbackData) {
 
   state.municipalityBoundaryLayer = L.geoJSON(sourceData, {
     pane: "municipalityBoundaryPane",
+    renderer: state.municipalityBoundaryRenderer,
     style: () => getMunicipalityBoundaryStyle(),
     filter: (feature) => {
       const municipality = canonicalMunicipality(getMunicipalityFromProps(feature?.properties || {}));
