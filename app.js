@@ -608,6 +608,12 @@ function initDepotMarkers() {
   state.depotMarkerLayer.addTo(state.map);
 }
 
+function bringDepotMarkersToFront() {
+  state.depotMarkerLayer?.eachLayer?.((layer) => {
+    layer?.bringToFront?.();
+  });
+}
+
 async function loadInScopeMunicipalities() {
   try {
     const res = await fetch(OPERATIONAL_ADMIN_BOUNDARY_GEOJSON);
@@ -972,7 +978,7 @@ function activateLayer(mode) {
 
   refreshAllStyles();
   state.municipalityBoundaryLayer?.bringToFront();
-  state.depotMarkerLayer?.bringToFront();
+  bringDepotMarkersToFront();
 }
 
 function buildGeoLayerForMode(mode) {
@@ -1555,7 +1561,7 @@ async function drawMunicipalityBoundaryLayer(fallbackData) {
   }).addTo(state.map);
 
   state.municipalityBoundaryLayer.bringToFront();
-  state.depotMarkerLayer?.bringToFront();
+  bringDepotMarkersToFront();
 }
 
 function getMunicipalityBoundaryStyle() {
