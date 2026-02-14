@@ -34,8 +34,12 @@ import {
 const LOADING_MIN_VISIBLE_MS = 600;
 const LOADING_FADE_OUT_MS = 220;
 const PREFECTURE_DISPLAY_ORDER = ["東京都", "神奈川県", "千葉県", "埼玉県"];
-const DETAIL_MODE_MIN_ZOOM = 13;
-const RENDER_MODE_HYSTERESIS = 0;
+const DETAIL_ENTER_ZOOM = 13;
+const DETAIL_EXIT_ZOOM = 12;
+const RENDER_SWITCH_DEBOUNCE_MS = 100;
+const PREWARM_DELAY_MS = 120;
+const DETAIL_SMOOTH_FACTOR = 1.2;
+const LITE_SMOOTH_FACTOR = 1.7;
 const LITE_STYLE = Object.freeze({
   selected: Object.freeze({ weight: 1.45, opacity: 0.72, fillOpacity: 0.2 }),
   default: Object.freeze({ weight: 0.95, opacity: 0.46, fillOpacity: 0.075 }),
@@ -110,6 +114,8 @@ const state = {
   },
   isMobileView: false,
   resizeTimerId: null,
+  renderSwitchTimerId: null,
+  prewarmTimerId: null,
 };
 
 const el = {
@@ -152,9 +158,9 @@ async function init() {
 }
 
 function initMap() {
-  state.map = L.map("map", { zoomControl: true, boxZoom: false }).setView([35.45, 139.55], 11);
+  state.map = L.map("map", { zoomControl: true, boxZoom: false, preferCanvas: true }).setView([35.45, 139.55], 11);
   state.lastZoomForModeSwitch = state.map.getZoom();
-  state.renderMode = getRenderModeForZoom(state.lastZoomForModeSwitch);
+  state.renderMode = getRenderModeForZoom(state.lastZoomForModeSwitch, state.renderMode);
 
   state.map.createPane("municipalityBoundaryPane");
   state.map.getPane("municipalityBoundaryPane").style.zIndex = "520";
@@ -211,12 +217,23 @@ function setupEventHandlers() {
   });
 
   state.map.on("zoomend", () => {
-    switchRenderModeIfNeeded();
+    scheduleRenderModeSwitch();
   });
   state.map.on("zoomstart", closeAllAreaTooltips);
   state.map.on("movestart", closeAllAreaTooltips);
 
   updateHistoryButtons();
+}
+
+function scheduleRenderModeSwitch() {
+  if (state.renderSwitchTimerId) {
+    clearTimeout(state.renderSwitchTimerId);
+    state.renderSwitchTimerId = null;
+  }
+  state.renderSwitchTimerId = setTimeout(() => {
+    state.renderSwitchTimerId = null;
+    switchRenderModeIfNeeded();
+  }, RENDER_SWITCH_DEBOUNCE_MS);
 }
 
 function handlePrefectureVisibilityChange() {
@@ -257,10 +274,11 @@ function rebuildGeoLayerForVisibility(flowToken = "") {
       skipFitBounds: true,
       preferredRenderMode: state.renderMode,
     });
+    scheduleLayerPrewarm();
     markPolygonsDoneAfterPaint(flowToken, buildPolygonLoadingLabel("visibility", state.visiblePrefectures));
   } finally {
     state.renderingLock = false;
-    switchRenderModeIfNeeded();
+    scheduleRenderModeSwitch();
   }
 }
 
@@ -273,6 +291,7 @@ async function loadDefaultGeoJson(flowToken = "") {
     const data = await res.json();
     initializeAllAssignmentsFromData(data);
     loadGeoJson(data);
+    scheduleLayerPrewarm();
     markPolygonsDoneAfterPaint(flowToken, buildPolygonLoadingLabel("initial", state.visiblePrefectures));
   } catch (_err) {
     finishLoadingFlowSilently(flowToken);
@@ -818,7 +837,7 @@ function loadGeoJson(data, options = {}) {
   const preferredRenderMode =
     options.preferredRenderMode === "lite" || options.preferredRenderMode === "detail"
       ? options.preferredRenderMode
-      : getRenderModeForZoom(state.map?.getZoom?.() ?? DETAIL_MODE_MIN_ZOOM);
+      : getRenderModeForZoom(state.map?.getZoom?.() ?? DETAIL_ENTER_ZOOM, state.renderMode);
 
   state.loadedGeoData = data;
   state.lastZoomForModeSwitch = state.map?.getZoom?.() ?? state.lastZoomForModeSwitch;
@@ -901,9 +920,18 @@ function loadGeoJson(data, options = {}) {
   resetSelectionHistory();
   refreshAllStyles();
   renderSelected();
+  scheduleLayerPrewarm();
 }
 
 function removeGeoLayersFromMap() {
+  if (state.prewarmTimerId) {
+    clearTimeout(state.prewarmTimerId);
+    state.prewarmTimerId = null;
+  }
+  if (state.renderSwitchTimerId) {
+    clearTimeout(state.renderSwitchTimerId);
+    state.renderSwitchTimerId = null;
+  }
   [state.currentGeoLayer, state.geoLayerLite, state.geoLayerDetail].forEach((layer) => {
     if (layer && state.map?.hasLayer(layer)) {
       state.map.removeLayer(layer);
@@ -911,12 +939,15 @@ function removeGeoLayersFromMap() {
   });
 }
 
-function getRenderModeForZoom(zoom) {
+function getRenderModeForZoom(zoom, currentMode = state.renderMode) {
   const z = Number(zoom);
   if (!Number.isFinite(z)) {
     return "detail";
   }
-  return z >= DETAIL_MODE_MIN_ZOOM + RENDER_MODE_HYSTERESIS ? "detail" : "lite";
+  if (currentMode === "detail") {
+    return z <= DETAIL_EXIT_ZOOM ? "lite" : "detail";
+  }
+  return z >= DETAIL_ENTER_ZOOM ? "detail" : "lite";
 }
 
 function switchRenderModeIfNeeded() {
@@ -925,7 +956,7 @@ function switchRenderModeIfNeeded() {
   }
   const zoom = state.map.getZoom();
   state.lastZoomForModeSwitch = zoom;
-  const nextMode = getRenderModeForZoom(zoom);
+  const nextMode = getRenderModeForZoom(zoom, state.renderMode);
   if (nextMode === state.renderMode) {
     return;
   }
@@ -937,19 +968,12 @@ function switchRenderModeIfNeeded() {
   }
 
   state.renderingLock = true;
-  const label = buildPolygonLoadingLabel("visibility", state.visiblePrefectures);
-  const token = startLoadingFlow("render-mode", label);
-  setLoadingStepDone("tiles", "Map Tilesを読み込んでいます...", token);
-
   requestAnimationFrame(() => {
     try {
       activateLayer(nextMode);
-      markPolygonsDoneAfterPaint(token, label);
-    } catch (_err) {
-      finishLoadingFlowSilently(token);
     } finally {
       state.renderingLock = false;
-      switchRenderModeIfNeeded();
+      scheduleRenderModeSwitch();
     }
   });
 }
@@ -976,7 +1000,6 @@ function activateLayer(mode) {
   state.lastZoomForModeSwitch = state.map?.getZoom?.() ?? state.lastZoomForModeSwitch;
   state.areaToLayers = normalizedMode === "detail" ? state.areaToLayersDetail : state.areaToLayersLite;
 
-  refreshAllStyles();
   state.municipalityBoundaryLayer?.bringToFront();
   bringDepotMarkersToFront();
 }
@@ -994,6 +1017,7 @@ function buildGeoLayerForMode(mode) {
     },
     {
       interactive,
+      smoothFactor: normalizedMode === "detail" ? DETAIL_SMOOTH_FACTOR : LITE_SMOOTH_FACTOR,
       style: (feature) => styleForArea(state.featureAreaIdMap.get(feature) || getAreaId(feature?.properties || {}), normalizedMode),
       onEachFeature: (feature, featureLayer) => {
         const areaId = state.featureAreaIdMap.get(feature) || getAreaId(feature?.properties || {});
@@ -1037,6 +1061,37 @@ function buildGeoLayerForMode(mode) {
     state.geoLayerLite = layer;
   }
   return layer;
+}
+
+function scheduleLayerPrewarm() {
+  if (state.prewarmTimerId) {
+    clearTimeout(state.prewarmTimerId);
+    state.prewarmTimerId = null;
+  }
+  state.prewarmTimerId = setTimeout(() => {
+    state.prewarmTimerId = null;
+    prewarmInactiveLayer();
+  }, PREWARM_DELAY_MS);
+}
+
+function prewarmInactiveLayer() {
+  if (state.renderingLock) {
+    return;
+  }
+  const inactiveMode = state.renderMode === "detail" ? "lite" : "detail";
+  const alreadyBuilt = inactiveMode === "detail" ? state.geoLayerDetail : state.geoLayerLite;
+  if (alreadyBuilt) {
+    return;
+  }
+  try {
+    buildGeoLayerForMode(inactiveMode);
+    const areaMap = inactiveMode === "detail" ? state.areaToLayersDetail : state.areaToLayersLite;
+    areaMap.forEach((layers, areaId) => {
+      layers.forEach((layer) => layer.setStyle(styleForArea(areaId, inactiveMode)));
+    });
+  } catch (_err) {
+    // prewarm失敗時は体験を止めない
+  }
 }
 
 function isPrefectureVisible(props) {
@@ -1605,12 +1660,16 @@ async function getMunicipalityBoundarySource() {
 
 function refreshAllStyles() {
   state.areaToLayers.forEach((layers, areaId) => {
-    layers.forEach((layer) => layer.setStyle(styleForArea(areaId)));
+    const mode = state.areaToLayers === state.areaToLayersDetail ? "detail" : "lite";
+    layers.forEach((layer) => layer.setStyle(styleForArea(areaId, mode)));
   });
 }
 
 function applyAreaStyle(areaId) {
-  state.areaToLayers.get(areaId)?.forEach((layer) => layer.setStyle(styleForArea(areaId)));
+  const detailLayers = state.areaToLayersDetail.get(areaId) || [];
+  detailLayers.forEach((layer) => layer.setStyle(styleForArea(areaId, "detail")));
+  const liteLayers = state.areaToLayersLite.get(areaId) || [];
+  liteLayers.forEach((layer) => layer.setStyle(styleForArea(areaId, "lite")));
 }
 
 function toggleAreaSelection(areaId) {
@@ -1650,6 +1709,7 @@ function assignSelected(depotCode) {
   }
 
   let changed = false;
+  const changedAreaIds = [];
   state.selected.forEach((areaId) => {
     if (!isInScopeArea(areaId)) {
       return;
@@ -1660,6 +1720,7 @@ function assignSelected(depotCode) {
     state.assignments.set(areaId, depotCode);
     state.allAssignments.set(areaId, depotCode);
     changed = true;
+    changedAreaIds.push(areaId);
 
     const layers = state.areaToLayers.get(areaId) || [];
     layers.forEach((layer) => {
@@ -1673,7 +1734,7 @@ function assignSelected(depotCode) {
     return;
   }
 
-  refreshAllStyles();
+  changedAreaIds.forEach((areaId) => applyAreaStyle(areaId));
 }
 
 function createAssignmentSnapshot() {
@@ -1732,8 +1793,20 @@ function applySelectionSnapshot(snapshot) {
   if (!Array.isArray(snapshot)) {
     return;
   }
-  state.selected = new Set(snapshot);
-  refreshAllStyles();
+  const nextSelected = new Set(snapshot);
+  const changedAreaIds = new Set();
+  state.selected.forEach((areaId) => {
+    if (!nextSelected.has(areaId)) {
+      changedAreaIds.add(areaId);
+    }
+  });
+  nextSelected.forEach((areaId) => {
+    if (!state.selected.has(areaId)) {
+      changedAreaIds.add(areaId);
+    }
+  });
+  state.selected = nextSelected;
+  changedAreaIds.forEach((areaId) => applyAreaStyle(areaId));
   renderSelected();
 }
 
