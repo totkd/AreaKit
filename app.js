@@ -57,14 +57,18 @@ const state = {
   asisPostalCodesByTown: new Map(),
   depotMarkerLayer: null,
   brushSelection: {
+    mode: "",
     pointerDown: false,
     dragActive: false,
     startAreaId: "",
     targetSelected: false,
     visitedAreaIds: new Set(),
     changed: false,
+    disabledMapDragging: false,
+    disabledTouchZoom: false,
   },
   suppressClickUntilMs: 0,
+  suppressContextMenuUntilMs: 0,
   isMobileView: false,
   resizeTimerId: null,
 };
@@ -129,7 +133,16 @@ function setupEventHandlers() {
   updatePanelToggleLabel();
 
   window.addEventListener("resize", handleViewportResize);
-  window.addEventListener("mouseup", finalizeBrushSelection);
+  window.addEventListener("mouseup", handleGlobalMouseUp);
+  window.addEventListener("contextmenu", handleGlobalContextMenu);
+
+  const mapContainer = state.map?.getContainer();
+  if (mapContainer) {
+    mapContainer.addEventListener("touchstart", handleMapTouchStart, { passive: false });
+    mapContainer.addEventListener("touchmove", handleMapTouchMove, { passive: false });
+    mapContainer.addEventListener("touchend", handleMapTouchEnd, { passive: false });
+    mapContainer.addEventListener("touchcancel", handleMapTouchEnd, { passive: false });
+  }
 
   el.basemapInputs.forEach((input) => {
     input.addEventListener("change", () => {
@@ -593,8 +606,13 @@ function loadGeoJson(data, options = {}) {
       state.assignments.set(areaId, resolvedDepot);
       state.allAssignments.set(areaId, resolvedDepot);
 
-      layer.on("mousedown", (event) => beginBrushSelection(areaId, event));
+      layer.on("add", () => setAreaIdOnLayerElement(layer, areaId));
+      setAreaIdOnLayerElement(layer, areaId);
+      layer.on("mousedown", (event) => beginBrushSelection(areaId, event, "mouse-right"));
       layer.on("mouseover", () => applyBrushSelection(areaId));
+      layer.on("contextmenu", (event) => {
+        event?.originalEvent?.preventDefault();
+      });
       layer.on("click", () => handleAreaClick(areaId, layer));
       layer.bindTooltip(tooltipText(areaId), {
         sticky: false,
@@ -714,29 +732,54 @@ function handleAreaClick(areaId, layer) {
   }
 }
 
-function beginBrushSelection(areaId, event) {
-  if (event?.originalEvent?.button !== undefined && event.originalEvent.button !== 0) {
+function beginBrushSelection(areaId, event, mode) {
+  if (!state.areaToLayers.has(areaId)) {
     return;
   }
 
-  state.brushSelection.pointerDown = true;
-  state.brushSelection.dragActive = false;
-  state.brushSelection.startAreaId = areaId;
-  state.brushSelection.targetSelected = !state.selected.has(areaId);
-  state.brushSelection.visitedAreaIds = new Set();
-  state.brushSelection.changed = false;
-  if (state.map?.dragging?.enabled()) {
-    state.map.dragging.disable();
+  if (mode === "mouse-right") {
+    if (event?.originalEvent?.button !== 2) {
+      return;
+    }
+  } else if (mode === "touch-two-finger") {
+    if ((event?.originalEvent?.touches?.length || 0) < 2) {
+      return;
+    }
+  } else {
+    return;
   }
 
-  if (event?.originalEvent) {
+  const brush = state.brushSelection;
+  brush.mode = mode;
+  brush.pointerDown = true;
+  brush.dragActive = false;
+  brush.startAreaId = areaId;
+  brush.targetSelected = !state.selected.has(areaId);
+  brush.visitedAreaIds = new Set();
+  brush.changed = false;
+  brush.disabledMapDragging = false;
+  brush.disabledTouchZoom = false;
+
+  if (state.map?.dragging?.enabled()) {
+    state.map.dragging.disable();
+    brush.disabledMapDragging = true;
+  }
+  if (mode === "touch-two-finger" && state.map?.touchZoom?.enabled?.()) {
+    state.map.touchZoom.disable();
+    brush.disabledTouchZoom = true;
+  }
+
+  if (event?.originalEvent?.preventDefault) {
     event.originalEvent.preventDefault();
   }
 }
 
 function applyBrushSelection(areaId) {
   const brush = state.brushSelection;
-  if (!brush.pointerDown) {
+  if (!brush.pointerDown || !brush.mode) {
+    return;
+  }
+  if (!state.areaToLayers.has(areaId)) {
     return;
   }
 
@@ -752,6 +795,10 @@ function applyBrushSelection(areaId) {
 }
 
 function applyBrushSelectionForArea(areaId) {
+  if (!state.areaToLayers.has(areaId)) {
+    return;
+  }
+
   const brush = state.brushSelection;
   if (brush.visitedAreaIds.has(areaId)) {
     return;
@@ -772,9 +819,9 @@ function applyBrushSelectionForArea(areaId) {
   }
 }
 
-function finalizeBrushSelection() {
+function finalizeBrushSelection(mode) {
   const brush = state.brushSelection;
-  if (!brush.pointerDown) {
+  if (!brush.pointerDown || !brush.mode || brush.mode !== mode) {
     return;
   }
 
@@ -794,15 +841,142 @@ function finalizeBrushSelection() {
 }
 
 function resetBrushSelection() {
-  if (state.map?.dragging && !state.map.dragging.enabled()) {
+  const brush = state.brushSelection;
+  if (brush.disabledMapDragging && state.map?.dragging && !state.map.dragging.enabled()) {
     state.map.dragging.enable();
   }
-  state.brushSelection.pointerDown = false;
-  state.brushSelection.dragActive = false;
-  state.brushSelection.startAreaId = "";
-  state.brushSelection.targetSelected = false;
-  state.brushSelection.visitedAreaIds = new Set();
-  state.brushSelection.changed = false;
+  if (brush.disabledTouchZoom && state.map?.touchZoom?.enabled && !state.map.touchZoom.enabled()) {
+    state.map.touchZoom.enable();
+  }
+
+  brush.mode = "";
+  brush.pointerDown = false;
+  brush.dragActive = false;
+  brush.startAreaId = "";
+  brush.targetSelected = false;
+  brush.visitedAreaIds = new Set();
+  brush.changed = false;
+  brush.disabledMapDragging = false;
+  brush.disabledTouchZoom = false;
+}
+
+function handleGlobalMouseUp(event) {
+  if (event?.button !== 2) {
+    return;
+  }
+  state.suppressContextMenuUntilMs = Date.now() + 320;
+  finalizeBrushSelection("mouse-right");
+}
+
+function handleGlobalContextMenu(event) {
+  if (Date.now() < state.suppressContextMenuUntilMs) {
+    event.preventDefault();
+    return;
+  }
+  if (state.brushSelection.mode !== "mouse-right") {
+    return;
+  }
+  event.preventDefault();
+}
+
+function handleMapTouchStart(event) {
+  if (state.brushSelection.pointerDown) {
+    return;
+  }
+  if ((event.touches?.length || 0) < 2) {
+    return;
+  }
+
+  const areaId = findFirstAreaIdFromTouches(event.touches);
+  if (!areaId) {
+    return;
+  }
+
+  beginBrushSelection(areaId, { originalEvent: event }, "touch-two-finger");
+}
+
+function handleMapTouchMove(event) {
+  const brush = state.brushSelection;
+  if (brush.mode !== "touch-two-finger" || !brush.pointerDown) {
+    return;
+  }
+
+  if ((event.touches?.length || 0) < 2) {
+    finalizeBrushSelection("touch-two-finger");
+    return;
+  }
+
+  event.preventDefault();
+  if (!brush.dragActive) {
+    brush.dragActive = true;
+    applyBrushSelectionForArea(brush.startAreaId);
+  }
+
+  const areaIds = findAreaIdsFromTouches(event.touches);
+  areaIds.forEach((areaId) => applyBrushSelection(areaId));
+}
+
+function handleMapTouchEnd(event) {
+  if (state.brushSelection.mode !== "touch-two-finger") {
+    return;
+  }
+  if ((event.touches?.length || 0) >= 2) {
+    return;
+  }
+  finalizeBrushSelection("touch-two-finger");
+}
+
+function setAreaIdOnLayerElement(layer, areaId) {
+  if (!layer || typeof layer.getElement !== "function") {
+    return;
+  }
+  const element = layer.getElement();
+  if (!element) {
+    return;
+  }
+  element.dataset.areaId = areaId;
+}
+
+function findFirstAreaIdFromTouches(touches) {
+  for (const touch of Array.from(touches || [])) {
+    const areaId = findAreaIdFromPoint(touch.clientX, touch.clientY);
+    if (areaId) {
+      return areaId;
+    }
+  }
+  return "";
+}
+
+function findAreaIdsFromTouches(touches) {
+  const out = new Set();
+  for (const touch of Array.from(touches || [])) {
+    const areaId = findAreaIdFromPoint(touch.clientX, touch.clientY);
+    if (areaId) {
+      out.add(areaId);
+    }
+  }
+  return out;
+}
+
+function findAreaIdFromPoint(clientX, clientY) {
+  const element = document.elementFromPoint(clientX, clientY);
+  if (!element) {
+    return "";
+  }
+
+  const mapContainer = state.map?.getContainer();
+  let cursor = element;
+  while (cursor && cursor !== document.body) {
+    const areaId = cursor.dataset?.areaId;
+    if (areaId && state.areaToLayers.has(areaId)) {
+      return areaId;
+    }
+    if (cursor === mapContainer) {
+      break;
+    }
+    cursor = cursor.parentElement;
+  }
+  return "";
 }
 
 function getDispatchAreaLabel(props, municipality, townName, postalCodes = []) {
@@ -1196,6 +1370,7 @@ function resetAllAssignments() {
   if (state.areaMeta.size === 0) {
     return;
   }
+  resetBrushSelection();
   state.allAssignments = new Map(state.initialAllAssignments);
   state.assignments = buildVisibleAssignmentsFrom(state.allAssignments);
   state.selected.clear();
