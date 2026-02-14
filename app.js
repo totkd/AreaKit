@@ -56,6 +56,15 @@ const state = {
   asisAreaLabelByPostal: new Map(),
   asisPostalCodesByTown: new Map(),
   depotMarkerLayer: null,
+  brushSelection: {
+    pointerDown: false,
+    dragActive: false,
+    startAreaId: "",
+    targetSelected: false,
+    visitedAreaIds: new Set(),
+    changed: false,
+  },
+  suppressClickUntilMs: 0,
   isMobileView: false,
   resizeTimerId: null,
 };
@@ -70,7 +79,6 @@ const el = {
   resetAll: document.getElementById("reset-all"),
   selectedCount: document.getElementById("selected-count"),
   selectedAreas: document.getElementById("selected-zips"),
-  stats: document.getElementById("stats"),
   basemapInputs: [...document.querySelectorAll('input[name="basemap"]')],
   prefectureVisibilityInputs: [...document.querySelectorAll('input[name="prefecture-visibility"]')],
 };
@@ -88,7 +96,6 @@ function init() {
   loadDefaultGeoJson();
 
   renderSelected();
-  renderStats();
 }
 
 function initMap() {
@@ -122,6 +129,7 @@ function setupEventHandlers() {
   updatePanelToggleLabel();
 
   window.addEventListener("resize", handleViewportResize);
+  window.addEventListener("mouseup", finalizeBrushSelection);
 
   el.basemapInputs.forEach((input) => {
     input.addEventListener("change", () => {
@@ -539,6 +547,7 @@ function loadGeoJson(data, options = {}) {
   state.nameIndex.clear();
   state.assignments.clear();
   state.selected.clear();
+  resetBrushSelection();
 
   let fallbackCounter = 0;
 
@@ -584,6 +593,8 @@ function loadGeoJson(data, options = {}) {
       state.assignments.set(areaId, resolvedDepot);
       state.allAssignments.set(areaId, resolvedDepot);
 
+      layer.on("mousedown", (event) => beginBrushSelection(areaId, event));
+      layer.on("mouseover", () => applyBrushSelection(areaId));
       layer.on("click", () => handleAreaClick(areaId, layer));
       layer.bindTooltip(tooltipText(areaId), {
         sticky: false,
@@ -620,7 +631,6 @@ function loadGeoJson(data, options = {}) {
   resetSelectionHistory();
   refreshAllStyles();
   renderSelected();
-  renderStats();
 }
 
 function isPrefectureVisible(props) {
@@ -677,6 +687,10 @@ function getPreferredFitBounds() {
 }
 
 function handleAreaClick(areaId, layer) {
+  if (Date.now() < state.suppressClickUntilMs) {
+    return;
+  }
+
   let changedSelection = false;
   if (state.selected.has(areaId)) {
     state.selected.delete(areaId);
@@ -698,6 +712,97 @@ function handleAreaClick(areaId, layer) {
   if (changedSelection) {
     pushSelectionHistory();
   }
+}
+
+function beginBrushSelection(areaId, event) {
+  if (event?.originalEvent?.button !== undefined && event.originalEvent.button !== 0) {
+    return;
+  }
+
+  state.brushSelection.pointerDown = true;
+  state.brushSelection.dragActive = false;
+  state.brushSelection.startAreaId = areaId;
+  state.brushSelection.targetSelected = !state.selected.has(areaId);
+  state.brushSelection.visitedAreaIds = new Set();
+  state.brushSelection.changed = false;
+  if (state.map?.dragging?.enabled()) {
+    state.map.dragging.disable();
+  }
+
+  if (event?.originalEvent) {
+    event.originalEvent.preventDefault();
+  }
+}
+
+function applyBrushSelection(areaId) {
+  const brush = state.brushSelection;
+  if (!brush.pointerDown) {
+    return;
+  }
+
+  if (!brush.dragActive && areaId !== brush.startAreaId) {
+    brush.dragActive = true;
+    applyBrushSelectionForArea(brush.startAreaId);
+  }
+  if (!brush.dragActive) {
+    return;
+  }
+
+  applyBrushSelectionForArea(areaId);
+}
+
+function applyBrushSelectionForArea(areaId) {
+  const brush = state.brushSelection;
+  if (brush.visitedAreaIds.has(areaId)) {
+    return;
+  }
+  brush.visitedAreaIds.add(areaId);
+
+  const hasArea = state.selected.has(areaId);
+  if (brush.targetSelected && !hasArea) {
+    state.selected.add(areaId);
+    applyAreaStyle(areaId);
+    brush.changed = true;
+    return;
+  }
+  if (!brush.targetSelected && hasArea) {
+    state.selected.delete(areaId);
+    applyAreaStyle(areaId);
+    brush.changed = true;
+  }
+}
+
+function finalizeBrushSelection() {
+  const brush = state.brushSelection;
+  if (!brush.pointerDown) {
+    return;
+  }
+
+  const wasDragSelection = brush.dragActive;
+  const hadChanges = brush.changed;
+  resetBrushSelection();
+
+  if (!wasDragSelection) {
+    return;
+  }
+
+  if (hadChanges) {
+    renderSelected();
+    pushSelectionHistory();
+  }
+  state.suppressClickUntilMs = Date.now() + 260;
+}
+
+function resetBrushSelection() {
+  if (state.map?.dragging && !state.map.dragging.enabled()) {
+    state.map.dragging.enable();
+  }
+  state.brushSelection.pointerDown = false;
+  state.brushSelection.dragActive = false;
+  state.brushSelection.startAreaId = "";
+  state.brushSelection.targetSelected = false;
+  state.brushSelection.visitedAreaIds = new Set();
+  state.brushSelection.changed = false;
 }
 
 function getDispatchAreaLabel(props, municipality, townName, postalCodes = []) {
@@ -929,7 +1034,6 @@ function refreshAllStyles() {
   state.areaToLayers.forEach((layers, areaId) => {
     layers.forEach((layer) => layer.setStyle(styleForArea(areaId)));
   });
-  renderStats();
 }
 
 function applyAreaStyle(areaId) {
@@ -1214,40 +1318,4 @@ function renderSelected() {
     chip.addEventListener("click", () => toggleAreaSelection(areaId));
     el.selectedAreas.append(chip);
   });
-}
-
-function renderStats() {
-  const total = state.assignments.size;
-  let assigned = 0;
-  const byDepot = { SGM: 0, FUJ: 0, YOK: 0 };
-
-  state.assignments.forEach((depotCode) => {
-    if (!depotCode) {
-      return;
-    }
-    assigned += 1;
-    if (byDepot[depotCode] !== undefined) {
-      byDepot[depotCode] += 1;
-    }
-  });
-
-  el.stats.innerHTML = "";
-  appendStat("Total zones", total);
-  appendStat("Assigned", assigned);
-  appendStat("Unassigned", Math.max(total - assigned, 0));
-  appendStat("SGM", byDepot.SGM);
-  appendStat("FUJ", byDepot.FUJ);
-  appendStat("YOK", byDepot.YOK);
-}
-
-function appendStat(label, value) {
-  const tr = document.createElement("tr");
-  const th = document.createElement("th");
-  th.className = "stat-key";
-  th.textContent = String(label);
-  const td = document.createElement("td");
-  td.className = "stat-value";
-  td.textContent = String(value);
-  tr.append(th, td);
-  el.stats.append(tr);
 }

@@ -79,9 +79,6 @@ h2 {
   line-height: 1.3;
   letter-spacing: 0.01em;
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .lead {
@@ -133,6 +130,60 @@ h2 {
 .ui-icon {
   fill: currentcolor;
   flex: 0 0 auto;
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: #7d8694;
+  background: #f2f4f8;
+  border: 1px solid #dbe1ea;
+  cursor: default;
+}
+
+.tip-bubble {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 7px);
+  z-index: 60;
+  min-width: 210px;
+  max-width: min(260px, 72vw);
+  border-radius: 9px;
+  background: #171b21;
+  color: #f6f8fb;
+  border: 1px solid #2c323f;
+  box-shadow: 0 8px 24px rgba(14, 18, 26, 0.32);
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 7px 8px;
+  opacity: 0;
+  transform: translateY(-3px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.info-tip:hover .tip-bubble {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .radio-group {
@@ -231,10 +282,6 @@ button.ghost.danger {
   font-weight: 600;
 }
 
-.map-subhead {
-  margin-top: 12px;
-}
-
 .depot-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -242,15 +289,25 @@ button.ghost.danger {
 }
 
 .depot-sgm {
-  background: var(--sgm);
+  background: #ebf5ef;
+  color: #256337;
+  border: 1px solid #c7dfcf;
 }
 
 .depot-fuj {
-  background: var(--fuj);
+  background: #edf3ff;
+  color: #224fa8;
+  border: 1px solid #c9d8f4;
 }
 
 .depot-yok {
-  background: var(--yok);
+  background: #fef0f0;
+  color: #9a3131;
+  border: 1px solid #f1caca;
+}
+
+.depot-btn:hover {
+  opacity: 0.96;
 }
 
 .row {
@@ -266,33 +323,6 @@ button.ghost.danger {
 #reset-all {
   width: 100%;
   margin-top: 8px;
-}
-
-.stats-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.stats-table tr + tr {
-  border-top: 1px solid #ebedf2;
-}
-
-.stat-key,
-.stat-value {
-  font-size: 13px;
-  padding: 7px 0;
-}
-
-.stat-key {
-  text-align: left;
-  color: #2f3642;
-  font-weight: 500;
-}
-
-.stat-value {
-  text-align: right;
-  color: #111722;
-  font-weight: 700;
 }
 
 .chips {

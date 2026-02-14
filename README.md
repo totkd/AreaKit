@@ -33,7 +33,6 @@
 - `Map Tiles`: 背景地図の切替
 - `Polygon Visibility`: 都県単位の町域表示切替（既定: 神奈川/東京ON, 千葉/埼玉OFF）
 - `Zone Select`: 選択件数・割当操作・Undo / Redo・All Reset
-- `Stats`: 全体件数 / 割当済み / 未割当 / デポ別件数
 - `Selected Zones`: 現在選択中の町域一覧
 
 ### CSV出力列

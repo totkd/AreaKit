@@ -31,17 +31,36 @@
         <p class="lead">2026 GION DELIVERY SERVICE KK.</p>
 
         <section class="card">
-          <h2>Map Tiles</h2>
+          <div class="section-header">
+            <h2>Map Tiles</h2>
+            <span class="info-tip" aria-hidden="true">
+              <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14">
+                <path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-4.25a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM8 6.5a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 8 6.5Z"></path>
+              </svg>
+              <span class="tip-bubble">背景の地図を変更します</span>
+            </span>
+          </div>
           <fieldset id="basemap-options" class="radio-group">
+            <label><input type="radio" name="basemap" value="esri_street" checked /> Esri ワールドストリート</label>
             <label><input type="radio" name="basemap" value="gsi_std" /> 地理院 標準（日本語）</label>
             <label><input type="radio" name="basemap" value="gsi_pale" /> 地理院 淡色</label>
             <label><input type="radio" name="basemap" value="gsi_seamless" /> 地理院 シームレス写真</label>
             <label><input type="radio" name="basemap" value="osm" /> オープンストリートマップ</label>
             <label><input type="radio" name="basemap" value="carto" /> CARTO ボイジャー</label>
             <label><input type="radio" name="basemap" value="carto_light" /> CARTO ポジトロン</label>
-            <label><input type="radio" name="basemap" value="esri_street" checked /> Esri ワールドストリート</label>
           </fieldset>
-          <p class="section-tag map-subhead">Polygon Visibility</p>
+        </section>
+
+        <section class="card">
+          <div class="section-header">
+            <h2>Polygon Visibility</h2>
+            <span class="info-tip" aria-hidden="true">
+              <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14">
+                <path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-4.25a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM8 6.5a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 8 6.5Z"></path>
+              </svg>
+              <span class="tip-bubble">町域ボーダーを表示する都県を選択します</span>
+            </span>
+          </div>
           <fieldset id="prefecture-visibility" class="checkbox-group">
             <label><input type="checkbox" name="prefecture-visibility" value="神奈川県" checked /> 神奈川県</label>
             <label><input type="checkbox" name="prefecture-visibility" value="東京都" checked /> 東京都</label>
@@ -51,7 +70,15 @@
         </section>
 
         <section class="card">
-          <h2>Zone Select</h2>
+          <div class="section-header">
+            <h2>Zone Select</h2>
+            <span class="info-tip" aria-hidden="true">
+              <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14">
+                <path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-4.25a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM8 6.5a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 8 6.5Z"></path>
+              </svg>
+              <span class="tip-bubble">選択したゾーンに対する操作を選んでください<br />All Resetをクリックすると初期状態に戻り、元に戻せません</span>
+            </span>
+          </div>
           <p id="selected-count">Selected: 0</p>
           <p class="section-tag">Allocate</p>
           <div class="depot-actions">
@@ -75,13 +102,6 @@
             Export
           </h2>
           <button id="export-csv" type="button">Download CSV</button>
-        </section>
-
-        <section class="card">
-          <h2>Stats</h2>
-          <table class="stats-table">
-            <tbody id="stats"></tbody>
-          </table>
         </section>
 
         <section class="card">
