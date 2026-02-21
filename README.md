@@ -40,7 +40,6 @@
 ### 追加した登録不要タイル
 - `OSM Humanitarian`
 - `地理院 白地図`
-- `地理院 色別標高図`
 - 方針: APIキー登録・課金情報登録なしで利用可能な公開タイルのみ追加
 - 注意: すべてのタイルで帰属表示（attribution）を維持する
 
@@ -105,6 +104,10 @@
 - 起動時に `data/asis_fine_polygons.geojson` を自動読込
 - 既定ベースマップは `Esri ワールドストリート`
 - Map Tiles は登録不要タイルを優先採用（APIキー必須ベンダは未導入）
+- `地理院 色別標高図` は運用対象から削除済み
+- Borderline Settings:
+  - `Shiku Boundary` は Width/Opacity/Color（線種は固定solid）
+  - Fill調整は `In-scope Fill` のみ（`0.00 ~ 3.00`）
 - 既定表示都県は `神奈川県` と `東京都`（`Polygon Visibility`で切替）
 - `Undo / Redo` は**選択履歴**を管理（割当履歴ではない）
 - `All Reset` は初期割当復元 + 選択解除 + 履歴初期化

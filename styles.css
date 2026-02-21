@@ -89,6 +89,16 @@ h2 {
   font-weight: 500;
 }
 
+.lead-link {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.lead-link:hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
 .repo-link {
   margin-top: 3px;
   display: inline-flex;
@@ -288,6 +298,49 @@ h2 {
   line-height: 1.4;
   font-weight: 600;
   color: #1f2937;
+}
+
+.boundary-summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.boundary-summary-label {
+  text-decoration: none;
+}
+
+.boundary-summary-tip {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 7px);
+  z-index: 65;
+  border-radius: 8px;
+  background: #171b21;
+  color: #f6f8fb;
+  border: 1px solid #2c323f;
+  box-shadow: 0 8px 24px rgba(14, 18, 26, 0.32);
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  padding: 6px 8px;
+  opacity: 0;
+  transform: translateY(-3px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.boundary-summary:hover .boundary-summary-label {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.boundary-summary:hover .boundary-summary-tip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .settings-accordion > summary::-webkit-details-marker {
@@ -541,8 +594,33 @@ button.ghost.danger {
   left: 12px;
   top: 12px;
   z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   background: #0e1117;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.panel-toggle-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentcolor;
+  color: #ffffff;
+}
+
+.panel-toggle-icon-collapsed {
+  display: none;
+}
+
+.layout.panel-collapsed .panel-toggle-icon-expanded {
+  display: none;
+}
+
+.layout.panel-collapsed .panel-toggle-icon-collapsed {
+  display: inline-block;
 }
 
 .panel-backdrop {
@@ -728,9 +806,10 @@ button.ghost.danger {
     left: max(10px, calc(8px + env(safe-area-inset-left)));
     top: max(10px, calc(8px + env(safe-area-inset-top)));
     z-index: 1500;
+    width: 42px;
+    height: 42px;
     min-height: 42px;
-    padding: 10px 12px;
-    font-size: 13px;
+    padding: 0;
   }
 
   .legend {

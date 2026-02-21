@@ -28,7 +28,9 @@
             <span class="repo-link-label">Github</span>
           </a>
         </div>
-        <p class="lead">2026 GION DELIVERY SERVICE KK.</p>
+        <a class="lead lead-link" href="https://www.gion-deliveryservice.co.jp/" target="_blank" rel="noopener noreferrer">
+          2026 GION DELIVERY SERVICE KK.
+        </a>
 
         <section class="card">
           <div class="section-header">
@@ -45,7 +47,6 @@
             <label><input type="radio" name="basemap" value="gsi_std" /> 地理院 標準（日本語）</label>
             <label><input type="radio" name="basemap" value="gsi_pale" /> 地理院 淡色</label>
             <label><input type="radio" name="basemap" value="gsi_blank" /> 地理院 白地図</label>
-            <label><input type="radio" name="basemap" value="gsi_relief" /> 地理院 色別標高図</label>
             <label><input type="radio" name="basemap" value="gsi_seamless" /> 地理院 シームレス写真</label>
             <label><input type="radio" name="basemap" value="osm" /> オープンストリートマップ</label>
             <label><input type="radio" name="basemap" value="osm_hot" /> OSM Humanitarian</label>
@@ -73,7 +74,15 @@
         </section>
 
         <section class="card">
-          <h2>Borderline Settings</h2>
+          <div class="section-header">
+            <h2>Borderline Settings</h2>
+            <span class="info-tip" aria-hidden="true">
+              <svg class="octicon ui-icon" viewBox="0 0 16 16" width="14" height="14">
+                <path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-4.25a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM8 6.5a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 8 6.5Z"></path>
+              </svg>
+              <span class="tip-bubble">境界線の太さや種類、塗り色を変更できます</span>
+            </span>
+          </div>
           <div class="settings-grid">
             <div class="settings-row">
               <label class="settings-label" for="border-preset">Preset</label>
@@ -86,11 +95,14 @@
             </div>
 
             <details id="settings-shiku" class="settings-accordion">
-              <summary>Shiku Boundary</summary>
+              <summary class="boundary-summary">
+                <span class="boundary-summary-label">Shiku Boundary</span>
+                <span class="boundary-summary-tip">市区町村の境界線</span>
+              </summary>
               <div class="settings-row">
                 <label class="settings-label" for="shiku-width">Width</label>
                 <div class="settings-control">
-                  <input id="shiku-width" type="range" min="0.2" max="3.0" step="0.1" />
+                  <input id="shiku-width" type="range" min="0.2" max="6.0" step="0.1" />
                   <span id="shiku-width-value" class="settings-value">2.9</span>
                 </div>
               </div>
@@ -102,21 +114,16 @@
                 </div>
               </div>
               <div class="settings-row">
-                <label class="settings-label" for="shiku-style">Style</label>
-                <select id="shiku-style" class="settings-select">
-                  <option value="solid">Solid</option>
-                  <option value="dashed">Dashed</option>
-                  <option value="dotted">Dotted</option>
-                </select>
-              </div>
-              <div class="settings-row">
                 <label class="settings-label" for="shiku-color">Color</label>
                 <input id="shiku-color" type="color" />
               </div>
             </details>
 
             <details id="settings-block" class="settings-accordion">
-              <summary>Block Boundary</summary>
+              <summary class="boundary-summary">
+                <span class="boundary-summary-label">Block Boundary</span>
+                <span class="boundary-summary-tip">町域ブロックの境界線</span>
+              </summary>
               <div class="settings-row">
                 <label class="settings-label" for="block-width">Width</label>
                 <div class="settings-control">
@@ -148,15 +155,8 @@
             <div class="settings-row">
               <label class="settings-label" for="fill-inscope">In-scope Fill</label>
               <div class="settings-control">
-                <input id="fill-inscope" type="range" min="0" max="1" step="0.01" />
+                <input id="fill-inscope" type="range" min="0" max="3" step="0.01" />
                 <span id="fill-inscope-value" class="settings-value">1.00</span>
-              </div>
-            </div>
-            <div class="settings-row">
-              <label class="settings-label" for="fill-outscope">Out-of-scope Fill</label>
-              <div class="settings-control">
-                <input id="fill-outscope" type="range" min="0" max="1" step="0.01" />
-                <span id="fill-outscope-value" class="settings-value">1.00</span>
               </div>
             </div>
           </div>
@@ -204,8 +204,13 @@
       </aside>
 
       <section class="map-wrap">
-        <button id="panel-toggle" type="button" class="panel-toggle" aria-expanded="true">
-          Hide Sidebar
+        <button id="panel-toggle" type="button" class="panel-toggle" aria-expanded="true" aria-label="Hide Sidebar">
+          <svg class="panel-toggle-icon panel-toggle-icon-expanded" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M9.78 12.53a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 0 1 0-1.06l4-4a.75.75 0 1 1 1.06 1.06L6.31 8l3.47 3.47a.75.75 0 0 1 0 1.06Z"></path>
+          </svg>
+          <svg class="panel-toggle-icon panel-toggle-icon-collapsed" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M6.22 12.53a.75.75 0 0 0 1.06 0l4-4a.75.75 0 0 0 0-1.06l-4-4a.75.75 0 1 0-1.06 1.06L9.69 8l-3.47 3.47a.75.75 0 0 0 0 1.06Z"></path>
+          </svg>
         </button>
         <button id="panel-backdrop" type="button" class="panel-backdrop" aria-label="Close Sidebar"></button>
         <div id="map"></div>

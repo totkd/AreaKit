@@ -53,15 +53,6 @@ export const BASEMAPS = {
       maxZoom: 18,
     },
   },
-  gsi_relief: {
-    name: "地理院 色別標高図",
-    url: "https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",
-    options: {
-      attribution:
-        '<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>',
-      maxZoom: 15,
-    },
-  },
   gsi_seamless: {
     name: "地理院 シームレス写真",
     url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",
