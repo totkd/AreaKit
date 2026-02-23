@@ -78,6 +78,12 @@ const BORDER_PRESETS = Object.freeze({
   }),
 });
 
+const PERF_MEASURES = Object.freeze({
+  LOAD_GEOJSON: "loadGeoJson",
+  BUILD_LAYER: "buildGeoLayerForMode",
+  ACTIVATE_LAYER: "activateLayer",
+});
+
 const state = {
   map: null,
   baseLayers: new Map(),
@@ -921,7 +927,9 @@ async function loadInScopeMunicipalities() {
       state.inScopeMunicipalities = new Set(values);
     }
 
-    refreshAllStyles();
+    refreshStylesForMode(state.renderMode);
+    const inactiveMode = state.renderMode === "detail" ? "lite" : "detail";
+    state.dirtyStyleModes.add(inactiveMode);
     if (state.loadedGeoData) {
       void drawMunicipalityBoundaryLayer(state.loadedGeoData);
     }
@@ -1095,8 +1103,10 @@ function applyAsisAreaLabelsToLoadedAreas() {
 }
 
 function loadGeoJson(data, options = {}) {
+  const perf = beginPerfMeasure(PERF_MEASURES.LOAD_GEOJSON);
   if (!data || data.type !== "FeatureCollection" || !Array.isArray(data.features)) {
     alert("Please provide a valid GeoJSON FeatureCollection.");
+    endPerfMeasure(perf);
     return;
   }
   const preserveAssignmentSnapshot = options.preserveAssignmentSnapshot instanceof Map ? options.preserveAssignmentSnapshot : null;
@@ -1189,9 +1199,9 @@ function loadGeoJson(data, options = {}) {
     state.initialAssignments = new Map(state.assignments);
   }
   resetSelectionHistory();
-  refreshAllStyles();
   renderSelected();
   scheduleLayerPrewarm();
+  endPerfMeasure(perf);
 }
 
 function removeGeoLayersFromMap() {
@@ -1250,12 +1260,14 @@ function switchRenderModeIfNeeded() {
 }
 
 function activateLayer(mode) {
+  const perf = beginPerfMeasure(PERF_MEASURES.ACTIVATE_LAYER);
   const normalizedMode = mode === "detail" ? "detail" : "lite";
   let layer = normalizedMode === "detail" ? state.geoLayerDetail : state.geoLayerLite;
   if (!layer) {
     layer = buildGeoLayerForMode(normalizedMode);
   }
   if (!layer) {
+    endPerfMeasure(perf);
     return;
   }
 
@@ -1277,11 +1289,13 @@ function activateLayer(mode) {
 
   state.municipalityBoundaryLayer?.bringToFront();
   bringDepotMarkersToFront();
+  endPerfMeasure(perf, `${normalizedMode}`);
 }
 
 function buildGeoLayerForMode(mode) {
+  const perf = beginPerfMeasure(PERF_MEASURES.BUILD_LAYER);
   const normalizedMode = mode === "detail" ? "detail" : "lite";
-  const interactive = true;
+  const interactive = normalizedMode === "detail";
   const enableBrush = normalizedMode === "detail";
   const layerMap = normalizedMode === "detail" ? state.areaToLayersDetail : state.areaToLayersLite;
   layerMap.clear();
@@ -1305,6 +1319,10 @@ function buildGeoLayerForMode(mode) {
         }
         layerMap.get(areaId).push(featureLayer);
         state.layerAreaIdMap.set(featureLayer, areaId);
+
+        if (!interactive) {
+          return;
+        }
 
         featureLayer.on("click", () => handleAreaClick(areaId, featureLayer));
 
@@ -1338,6 +1356,7 @@ function buildGeoLayerForMode(mode) {
   } else {
     state.geoLayerLite = layer;
   }
+  endPerfMeasure(perf, `${normalizedMode}`);
   return layer;
 }
 
@@ -1363,10 +1382,6 @@ function prewarmInactiveLayer() {
   }
   try {
     buildGeoLayerForMode(inactiveMode);
-    const areaMap = inactiveMode === "detail" ? state.areaToLayersDetail : state.areaToLayersLite;
-    areaMap.forEach((layers, areaId) => {
-      layers.forEach((layer) => layer.setStyle(styleForArea(areaId, inactiveMode)));
-    });
   } catch (_err) {
     // prewarm失敗時は体験を止めない
   }
@@ -1426,6 +1441,9 @@ function getPreferredFitBounds() {
 }
 
 function handleAreaClick(areaId, layer) {
+  if (state.renderMode !== "detail" || state.renderingLock) {
+    return;
+  }
   if (Date.now() < state.suppressClickUntilMs) {
     return;
   }
@@ -1455,6 +1473,9 @@ function handleAreaClick(areaId, layer) {
 }
 
 function handleMapClickFallback(event) {
+  if (state.renderMode !== "detail") {
+    return;
+  }
   if (!event?.latlng || !state.currentGeoLayer || state.renderingLock) {
     return;
   }
@@ -2060,10 +2081,12 @@ function clearBorderRefreshQueue(clearDirty = false) {
 }
 
 function applyAreaStyle(areaId) {
-  const detailLayers = state.areaToLayersDetail.get(areaId) || [];
-  detailLayers.forEach((layer) => layer.setStyle(styleForArea(areaId, "detail")));
-  const liteLayers = state.areaToLayersLite.get(areaId) || [];
-  liteLayers.forEach((layer) => layer.setStyle(styleForArea(areaId, "lite")));
+  const currentMode = state.renderMode === "detail" ? "detail" : "lite";
+  const inactiveMode = currentMode === "detail" ? "lite" : "detail";
+  const currentMap = currentMode === "detail" ? state.areaToLayersDetail : state.areaToLayersLite;
+  const layers = currentMap.get(areaId) || [];
+  layers.forEach((layer) => layer.setStyle(styleForArea(areaId, currentMode)));
+  state.dirtyStyleModes.add(inactiveMode);
 }
 
 function toggleAreaSelection(areaId) {
@@ -2242,7 +2265,9 @@ function resetAllAssignments() {
   state.allAssignments = new Map(state.initialAllAssignments);
   state.assignments = buildVisibleAssignmentsFrom(state.allAssignments);
   state.selected.clear();
-  refreshAllStyles();
+  refreshStylesForMode(state.renderMode);
+  const inactiveMode = state.renderMode === "detail" ? "lite" : "detail";
+  state.dirtyStyleModes.add(inactiveMode);
   syncPopupContentForAllAreas();
   renderSelected();
   resetSelectionHistory();
@@ -2397,4 +2422,43 @@ function createBorderSettingsFromPreset(presetKey = "default") {
       inScope: clamp(toNumber(preset?.fill?.inScope, 1), 0, 3),
     },
   };
+}
+
+function beginPerfMeasure(name) {
+  if (
+    typeof performance === "undefined" ||
+    typeof performance.mark !== "function" ||
+    typeof performance.measure !== "function"
+  ) {
+    return null;
+  }
+  const token = `${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const start = `${token}-start`;
+  const end = `${token}-end`;
+  performance.mark(start);
+  return { name, start, end, token };
+}
+
+function endPerfMeasure(ctx, detail = "") {
+  if (!ctx) {
+    return;
+  }
+  try {
+    performance.mark(ctx.end);
+    performance.measure(ctx.token, ctx.start, ctx.end);
+    const entries = performance.getEntriesByName(ctx.token);
+    const duration = entries.length > 0 ? entries[entries.length - 1].duration : 0;
+    const suffix = detail ? ` (${detail})` : "";
+    console.debug(`[perf] ${ctx.name}${suffix}: ${duration.toFixed(1)}ms`);
+  } catch (_err) {
+    // 計測失敗は処理継続
+  } finally {
+    if (typeof performance.clearMarks === "function") {
+      performance.clearMarks(ctx.start);
+      performance.clearMarks(ctx.end);
+    }
+    if (typeof performance.clearMeasures === "function") {
+      performance.clearMeasures(ctx.token);
+    }
+  }
 }
